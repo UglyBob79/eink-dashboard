@@ -208,6 +208,7 @@ class EinkDashboard(hass.Hass):
             draw.text((cx, y0 + 10), icon, font=f["icon"], fill=tc, anchor="mt")
         else:
             draw.text((cx, y0 + 10), label, font=f["label"], fill=tc, anchor="mt")
+        draw.line([(x0 + 8, y0 + 24), (x1 - 8, y0 + 24)], fill=tc, width=1)
         if value is not None:
             draw.text((cx, cy), value, font=f["large"], fill=tc, anchor="mm")
         if sub is not None:

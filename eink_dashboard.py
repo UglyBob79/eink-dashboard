@@ -2,8 +2,8 @@ import appdaemon.plugins.hass.hassapi as hass
 from PIL import Image, ImageDraw, ImageFont
 import os
 
-# Display: Waveshare 7.5" V2 landscape
-W, H     = 800, 480
+# Display: Waveshare 7.5" V2 portrait
+W, H     = 480, 800
 OUT_DIR  = "/homeassistant/www"
 FONTS_DIR = "/homeassistant/esphome/apps/dashboard/fonts"
 
@@ -15,7 +15,10 @@ SENSOR_SOLAR    = "sensor.victron_mqtt_system_0_system_dc_pv_power"
 SENSOR_GRID     = "sensor.victron_grid_power"        # positive=import, negative=export
 SENSOR_BATTERY  = "sensor.victron_mqtt_system_0_system_dc_battery_power"  # positive=discharge
 SENSOR_BATT_SOC = "sensor.victron_mqtt_system_0_system_dc_battery_soc"
-SENSOR_LOAD     = "sensor.victron_consumption"
+SENSOR_LOAD          = "sensor.victron_consumption"
+SENSOR_INVERTER_STATE = "sensor.victron_mqtt_vebus_274_vebus_inverter_state"
+
+SYSTEM_LABEL = "VICTRON"
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 #
@@ -29,11 +32,11 @@ SENSOR_LOAD     = "sensor.victron_consumption"
 #
 #                           | <- ~x=510 free space to the right ->
 #
-SOLAR_POS  = (250,  58);  SOLAR_BOX  = (130,  74)
-SYSTEM_POS = (250, 195);  SYSTEM_BOX = (138, 104)
-GRID_POS   = ( 78, 195);  GRID_BOX   = (118,  90)
-HOME_POS   = (422, 195);  HOME_BOX   = (130, 104)
-BATT_POS   = (250, 335);  BATT_BOX   = (160,  90)
+SOLAR_POS  = (240,  80);  SOLAR_BOX  = (140,  80)
+SYSTEM_POS = (240, 215);  SYSTEM_BOX = (150, 120)
+GRID_POS   = ( 75, 215);  GRID_BOX   = (110,  90)
+HOME_POS   = (405, 215);  HOME_BOX   = (110, 100)
+BATT_POS   = (240, 355);  BATT_BOX   = (160,  90)
 
 
 class EinkDashboard(hass.Hass):
@@ -41,7 +44,7 @@ class EinkDashboard(hass.Hass):
     def initialize(self):
         os.makedirs(OUT_DIR, exist_ok=True)
         self.fonts = self._load_fonts()
-        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD]:
+        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD, SENSOR_INVERTER_STATE]:
             self.listen_state(self.on_update, s)
         self.generate()
 
@@ -65,7 +68,8 @@ class EinkDashboard(hass.Hass):
         grid_w    = self._float(SENSOR_GRID)
         battery_w = self._float(SENSOR_BATTERY)
         soc       = self._float(SENSOR_BATT_SOC)
-        load_w    = self._float(SENSOR_LOAD)
+        load_w         = self._float(SENSOR_LOAD)
+        inverter_state = self.get_state(SENSOR_INVERTER_STATE) or ""
 
         # Flow logic
         solar_on     = solar_w   >  50
@@ -114,7 +118,8 @@ class EinkDashboard(hass.Hass):
                   filled=solar_on)
 
         self._box(draw, f, *SYSTEM_POS, *SYSTEM_BOX,
-                  "SYSTEM", None,
+                  "SYSTEM", SYSTEM_LABEL,
+                  sub=inverter_state.upper(),
                   filled=True)  # inverter hub — always highlighted
 
         self._box(draw, f, *GRID_POS, *GRID_BOX,

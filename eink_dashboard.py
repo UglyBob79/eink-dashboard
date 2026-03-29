@@ -24,6 +24,7 @@ SYSTEM_LABEL = "VICTRON"
 STATUS_GRID_LOST = "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost"
 STATUS_CAT_BOX        = "binary_sensor.magnet_cat_box_contact"
 STATUS_CAT_BOX_DT     = "input_datetime.cat_box_last_emptied"
+STATUS_POOL_PUMP      = "switch.poolpump1_relay"
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 #
@@ -57,7 +58,7 @@ class EinkDashboard(hass.Hass):
         os.makedirs(OUT_DIR, exist_ok=True)
         self.fonts = self._load_fonts()
         for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD, SENSOR_INVERTER_STATE,
-                  STATUS_GRID_LOST, STATUS_CAT_BOX_DT]:
+                  STATUS_GRID_LOST, STATUS_CAT_BOX_DT, STATUS_POOL_PUMP]:
             self.listen_state(self.on_update, s)
         self.generate()
 
@@ -177,6 +178,11 @@ class EinkDashboard(hass.Hass):
 
         cat_val = self._elapsed(STATUS_CAT_BOX_DT)
         self._status_row(draw, f, row_y, "\U000F011B", "Cat box emptied", cat_val)
+        row_y += 28
+
+        pump_on  = self.get_state(STATUS_POOL_PUMP) == "on"
+        pump_val = f"for {self._elapsed(STATUS_POOL_PUMP)}" if pump_on else f"off · {self._elapsed(STATUS_POOL_PUMP)}"
+        self._status_row(draw, f, row_y, "\U000F0606", "Pool pump", pump_val)
         row_y += 28
 
         # ── 1-bit, no dithering ───────────────────────────────────────────

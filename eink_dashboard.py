@@ -34,7 +34,7 @@ SYSTEM_LABEL = "VICTRON"
 #
 # Global offset for the entire power flow diagram
 DIAGRAM_X =   0
-DIAGRAM_Y =   0
+DIAGRAM_Y =  70
 
 def _pos(x, y):
     return (DIAGRAM_X + x, DIAGRAM_Y + y)
@@ -85,6 +85,17 @@ class EinkDashboard(hass.Hass):
         exporting    = grid_w    < -50   # system → grid
         charging     = battery_w < -50   # system → battery
         discharging  = battery_w >  50   # battery → system
+
+        # ── Title ─────────────────────────────────────────────────────────
+        icon_w = draw.textlength("\U000F140B", font=f["icon"])  # mdi-lightning-bolt
+        text_w = draw.textlength("ENERGY", font=f["medium"])
+        gap    = 8
+        total  = icon_w + gap + text_w
+        x      = (W - total) // 2
+        ty     = 46   # vertical center for icon + text
+        draw.text((x, ty), "\U000F140B", font=f["icon"],   fill=BLACK, anchor="lm")
+        draw.text((x + icon_w + gap, ty), "ENERGY", font=f["medium"], fill=BLACK, anchor="lm")
+        draw.line([(20, ty + 22), (W - 20, ty + 22)], fill=BLACK, width=2)
 
         # ── Arrows (drawn before boxes so box borders cover line ends) ────
 
@@ -148,7 +159,7 @@ class EinkDashboard(hass.Hass):
 
     # ── Box ───────────────────────────────────────────────────────────────────
 
-    def _box(self, draw, f, cx, cy, bw, bh, label, value, sub=None, filled=False):
+    def _box(self, draw, f, cx, cy, bw, bh, label, value, sub=None, filled=False, icon=None):
         x0, y0 = cx - bw // 2, cy - bh // 2
         x1, y1 = cx + bw // 2, cy + bh // 2
         r = 14
@@ -159,7 +170,10 @@ class EinkDashboard(hass.Hass):
             draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=BLACK, outline=WHITE, width=3)
             tc = WHITE
 
-        draw.text((cx, y0 + 10), label, font=f["label"], fill=tc, anchor="mt")
+        if icon:
+            draw.text((cx, y0 + 10), icon, font=f["icon"], fill=tc, anchor="mt")
+        else:
+            draw.text((cx, y0 + 10), label, font=f["label"], fill=tc, anchor="mt")
         if value is not None:
             draw.text((cx, cy), value, font=f["large"], fill=tc, anchor="mm")
         if sub is not None:
@@ -236,14 +250,16 @@ class EinkDashboard(hass.Hass):
     def _load_fonts(self):
         bold = f"{FONTS_DIR}/GothamRnd-Bold.ttf"
         book = f"{FONTS_DIR}/GothamRnd-Book.ttf"
+        mdi = f"{FONTS_DIR}/materialdesignicons-webfont.ttf"
         try:
             return {
                 "large":  ImageFont.truetype(bold, 26),
                 "medium": ImageFont.truetype(bold, 22),
                 "small":  ImageFont.truetype(book, 13),
                 "label":  ImageFont.truetype(book, 12),
+                "icon":   ImageFont.truetype(mdi, 28),
             }
         except Exception as e:
             self.log(f"Font load failed, using default: {e}", level="WARNING")
             d = ImageFont.load_default()
-            return {"large": d, "medium": d, "small": d, "label": d}
+            return {"large": d, "medium": d, "small": d, "label": d, "icon": d}

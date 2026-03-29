@@ -1,0 +1,224 @@
+import appdaemon.plugins.hass.hassapi as hass
+from PIL import Image, ImageDraw, ImageFont
+import os
+
+# Display: Waveshare 7.5" V2 landscape
+W, H     = 800, 480
+OUT_DIR  = "/homeassistant/www"
+FONTS_DIR = "/homeassistant/esphome/apps/dashboard/fonts"
+
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+
+# Victron sensors
+SENSOR_SOLAR    = "sensor.victron_mqtt_system_0_system_dc_pv_power"
+SENSOR_GRID     = "sensor.victron_grid_power"        # positive=import, negative=export
+SENSOR_BATTERY  = "sensor.victron_mqtt_system_0_system_dc_battery_power"  # positive=discharge
+SENSOR_BATT_SOC = "sensor.victron_mqtt_system_0_system_dc_battery_soc"
+SENSOR_LOAD     = "sensor.victron_consumption"
+
+# ── Layout ────────────────────────────────────────────────────────────────────
+#
+#  Diagram anchored top-left (~500x390px), leaving right + bottom for future use
+#
+#               [SOLAR]
+#                  ↓
+#   [GRID] ──↔── [SYSTEM] ──→── [HOME]
+#                  ↕
+#              [BATTERY]
+#
+#                           | <- ~x=510 free space to the right ->
+#
+SOLAR_POS  = (250,  58);  SOLAR_BOX  = (130,  74)
+SYSTEM_POS = (250, 195);  SYSTEM_BOX = (138, 104)
+GRID_POS   = ( 78, 195);  GRID_BOX   = (118,  90)
+HOME_POS   = (422, 195);  HOME_BOX   = (130, 104)
+BATT_POS   = (250, 335);  BATT_BOX   = (160,  90)
+
+
+class EinkDashboard(hass.Hass):
+
+    def initialize(self):
+        os.makedirs(OUT_DIR, exist_ok=True)
+        self.fonts = self._load_fonts()
+        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD]:
+            self.listen_state(self.on_update, s)
+        self.generate()
+
+    def on_update(self, entity, attribute, old, new, kwargs):
+        self.generate()
+
+    def generate(self):
+        try:
+            self._render_power_page()
+        except Exception as e:
+            self.log(f"EinkDashboard render error: {e}", level="ERROR")
+
+    # ── Rendering ─────────────────────────────────────────────────────────────
+
+    def _render_power_page(self):
+        img  = Image.new("RGB", (W, H), WHITE)
+        draw = ImageDraw.Draw(img)
+        f    = self.fonts
+
+        solar_w   = self._float(SENSOR_SOLAR)
+        grid_w    = self._float(SENSOR_GRID)
+        battery_w = self._float(SENSOR_BATTERY)
+        soc       = self._float(SENSOR_BATT_SOC)
+        load_w    = self._float(SENSOR_LOAD)
+
+        # Flow logic
+        solar_on     = solar_w   >  50
+        load_on      = load_w    >  50
+        importing    = grid_w    >  50   # grid → system
+        exporting    = grid_w    < -50   # system → grid
+        charging     = battery_w < -50   # system → battery
+        discharging  = battery_w >  50   # battery → system
+
+        # ── Arrows (drawn before boxes so box borders cover line ends) ────
+
+        # Solar → System (down)
+        self._arrow_down(draw,
+                         SOLAR_POS[0],
+                         SOLAR_POS[1]  + SOLAR_BOX[1]  // 2,
+                         SYSTEM_POS[1] - SYSTEM_BOX[1] // 2,
+                         active=solar_on)
+
+        # Grid ↔ System (horizontal)
+        x_gap_left  = GRID_POS[0]   + GRID_BOX[0]   // 2
+        x_gap_right = SYSTEM_POS[0] - SYSTEM_BOX[0] // 2
+        if importing:
+            self._arrow_right(draw, x_gap_left, x_gap_right, GRID_POS[1], active=True)
+        else:
+            self._arrow_left(draw, x_gap_left, x_gap_right, GRID_POS[1], active=exporting)
+
+        # System → Home (right)
+        self._arrow_right(draw,
+                          SYSTEM_POS[0] + SYSTEM_BOX[0] // 2,
+                          HOME_POS[0]   - HOME_BOX[0]   // 2,
+                          SYSTEM_POS[1],
+                          active=load_on)
+
+        # Battery ↔ System (vertical)
+        y_gap_top = SYSTEM_POS[1] + SYSTEM_BOX[1] // 2
+        y_gap_bot = BATT_POS[1]   - BATT_BOX[1]   // 2
+        if charging:
+            self._arrow_down(draw, BATT_POS[0], y_gap_top, y_gap_bot, active=True)
+        else:
+            self._arrow_up(draw, BATT_POS[0], y_gap_top, y_gap_bot, active=discharging)
+
+        # ── Boxes ─────────────────────────────────────────────────────────
+
+        self._box(draw, f, *SOLAR_POS, *SOLAR_BOX,
+                  "SOLAR", f"{int(solar_w)} W",
+                  filled=solar_on)
+
+        self._box(draw, f, *SYSTEM_POS, *SYSTEM_BOX,
+                  "SYSTEM", None,
+                  filled=True)  # inverter hub — always highlighted
+
+        self._box(draw, f, *GRID_POS, *GRID_BOX,
+                  "GRID", f"{int(abs(grid_w))} W",
+                  sub="IMPORT" if importing else ("EXPORT" if exporting else "IDLE"))
+
+        self._box(draw, f, *HOME_POS, *HOME_BOX,
+                  "HOME", f"{int(load_w)} W")
+
+        batt_sub = "CHARGING" if charging else ("DISCHARGING" if discharging else "IDLE")
+        self._box(draw, f, *BATT_POS, *BATT_BOX,
+                  "BATTERY", f"{int(soc)}%",
+                  sub=f"{int(abs(battery_w))} W  ·  {batt_sub}")
+
+        # ── 1-bit, no dithering ───────────────────────────────────────────
+        img.convert("1", dither=Image.Dither.NONE).save(f"{OUT_DIR}/eink_page0.png")
+        self.log("Rendered eink_page0.png")
+
+    # ── Box ───────────────────────────────────────────────────────────────────
+
+    def _box(self, draw, f, cx, cy, bw, bh, label, value, sub=None, filled=False):
+        x0, y0 = cx - bw // 2, cy - bh // 2
+        x1, y1 = cx + bw // 2, cy + bh // 2
+        r = 14
+        if filled:
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=WHITE, outline=BLACK, width=3)
+            tc = BLACK
+        else:
+            draw.rounded_rectangle([x0, y0, x1, y1], radius=r, fill=BLACK, outline=WHITE, width=3)
+            tc = WHITE
+
+        draw.text((cx, y0 + 10), label, font=f["label"], fill=tc, anchor="mt")
+        if value is not None:
+            draw.text((cx, cy), value, font=f["large"], fill=tc, anchor="mm")
+        if sub is not None:
+            draw.text((cx, y1 - 10), sub, font=f["small"], fill=tc, anchor="mb")
+
+    # ── Directional arrows ────────────────────────────────────────────────────
+
+    def _arrow_down(self, draw, cx, y_top, y_bot, active=True):
+        if active:
+            draw.line([(cx, y_top), (cx, y_bot - 14)], fill=BLACK, width=3)
+            draw.polygon([(cx, y_bot), (cx-10, y_bot-16), (cx+10, y_bot-16)], fill=BLACK)
+        else:
+            self._dash_v(draw, cx, y_top, y_bot - 8)
+            draw.polygon([(cx, y_bot), (cx-7, y_bot-11), (cx+7, y_bot-11)], fill=BLACK)
+
+    def _arrow_up(self, draw, cx, y_top, y_bot, active=True):
+        if active:
+            draw.line([(cx, y_bot), (cx, y_top + 14)], fill=BLACK, width=3)
+            draw.polygon([(cx, y_top), (cx-10, y_top+16), (cx+10, y_top+16)], fill=BLACK)
+        else:
+            self._dash_v(draw, cx, y_top + 8, y_bot)
+            draw.polygon([(cx, y_top), (cx-7, y_top+11), (cx+7, y_top+11)], fill=BLACK)
+
+    def _arrow_right(self, draw, x_left, x_right, cy, active=True):
+        if active:
+            draw.line([(x_left, cy), (x_right - 14, cy)], fill=BLACK, width=3)
+            draw.polygon([(x_right, cy), (x_right-16, cy-10), (x_right-16, cy+10)], fill=BLACK)
+        else:
+            self._dash_h(draw, x_left, x_right - 8, cy)
+            draw.polygon([(x_right, cy), (x_right-11, cy-7), (x_right-11, cy+7)], fill=BLACK)
+
+    def _arrow_left(self, draw, x_left, x_right, cy, active=True):
+        if active:
+            draw.line([(x_right, cy), (x_left + 14, cy)], fill=BLACK, width=3)
+            draw.polygon([(x_left, cy), (x_left+16, cy-10), (x_left+16, cy+10)], fill=BLACK)
+        else:
+            self._dash_h(draw, x_left + 8, x_right, cy)
+            draw.polygon([(x_left, cy), (x_left+11, cy-7), (x_left+11, cy+7)], fill=BLACK)
+
+    # ── Dashed line helpers ───────────────────────────────────────────────────
+
+    def _dash_v(self, draw, cx, y0, y1, dash=8, gap=5):
+        y = y0
+        while y < y1:
+            draw.line([(cx, y), (cx, min(y + dash, y1))], fill=BLACK, width=1)
+            y += dash + gap
+
+    def _dash_h(self, draw, x0, x1, cy, dash=8, gap=5):
+        x = x0
+        while x < x1:
+            draw.line([(x, cy), (min(x + dash, x1), cy)], fill=BLACK, width=1)
+            x += dash + gap
+
+    # ── Utilities ─────────────────────────────────────────────────────────────
+
+    def _float(self, entity, default=0.0):
+        try:
+            return float(self.get_state(entity))
+        except (ValueError, TypeError):
+            return default
+
+    def _load_fonts(self):
+        bold = f"{FONTS_DIR}/GothamRnd-Bold.ttf"
+        book = f"{FONTS_DIR}/GothamRnd-Book.ttf"
+        try:
+            return {
+                "large":  ImageFont.truetype(bold, 26),
+                "medium": ImageFont.truetype(bold, 22),
+                "small":  ImageFont.truetype(book, 13),
+                "label":  ImageFont.truetype(book, 12),
+            }
+        except Exception as e:
+            self.log(f"Font load failed, using default: {e}", level="WARNING")
+            d = ImageFont.load_default()
+            return {"large": d, "medium": d, "small": d, "label": d}

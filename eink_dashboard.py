@@ -133,6 +133,7 @@ class EinkDashboard(hass.Hass):
         self._box(draw, f, *BATT_POS, *BATT_BOX,
                   "BATTERY", f"{int(soc)}%",
                   sub=f"{int(abs(battery_w))} W  ·  {batt_sub}")
+        self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
         # ── 1-bit, no dithering ───────────────────────────────────────────
         img.convert("1", dither=Image.Dither.NONE).save(f"{OUT_DIR}/eink_page0.png")
@@ -156,6 +157,22 @@ class EinkDashboard(hass.Hass):
             draw.text((cx, cy), value, font=f["large"], fill=tc, anchor="mm")
         if sub is not None:
             draw.text((cx, y1 - 10), sub, font=f["small"], fill=tc, anchor="mb")
+
+    def _battery_poles(self, draw, f, cx, cy, bw, bh):
+        box_top = cy - bh // 2
+        pw, ph  = 20, 12   # pole width, height
+        offset  = 45       # distance from center to each pole
+        r       = 3
+
+        for sign, dx in (("+", offset), ("−", -offset)):
+            px = cx + dx
+            # Pole sticking up above the box
+            draw.rounded_rectangle(
+                [px - pw // 2, box_top - ph, px + pw // 2, box_top + 2],
+                radius=r, fill=BLACK, outline=WHITE, width=2)
+            # Sign inside the box just below the pole
+            draw.text((px, box_top + 14), sign, font=f["small"],
+                      fill=WHITE, anchor="mm")
 
     # ── Directional arrows ────────────────────────────────────────────────────
 

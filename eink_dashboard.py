@@ -32,11 +32,18 @@ SYSTEM_LABEL = "VICTRON"
 #
 #                           | <- ~x=510 free space to the right ->
 #
-SOLAR_POS  = (240,  80);  SOLAR_BOX  = (140,  80)
-SYSTEM_POS = (240, 215);  SYSTEM_BOX = (150, 120)
-GRID_POS   = ( 75, 215);  GRID_BOX   = (110,  90)
-HOME_POS   = (405, 215);  HOME_BOX   = (110, 100)
-BATT_POS   = (240, 355);  BATT_BOX   = (160,  90)
+# Global offset for the entire power flow diagram
+DIAGRAM_X =   0
+DIAGRAM_Y =   0
+
+def _pos(x, y):
+    return (DIAGRAM_X + x, DIAGRAM_Y + y)
+
+SOLAR_POS  = _pos(240,  80);  SOLAR_BOX  = (140,  80)
+SYSTEM_POS = _pos(240, 215);  SYSTEM_BOX = (150, 120)
+GRID_POS   = _pos( 75, 215);  GRID_BOX   = (110,  90)
+HOME_POS   = _pos(405, 215);  HOME_BOX   = (110, 100)
+BATT_POS   = _pos(240, 355);  BATT_BOX   = (160,  90)
 
 
 class EinkDashboard(hass.Hass):

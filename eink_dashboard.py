@@ -159,32 +159,28 @@ class EinkDashboard(hass.Hass):
             draw.line([(cx, y_top), (cx, y_bot - 14)], fill=BLACK, width=3)
             draw.polygon([(cx, y_bot), (cx-10, y_bot-16), (cx+10, y_bot-16)], fill=BLACK)
         else:
-            self._dash_v(draw, cx, y_top, y_bot - 8)
-            draw.polygon([(cx, y_bot), (cx-7, y_bot-11), (cx+7, y_bot-11)], fill=BLACK)
+            self._dash_v(draw, cx, y_top, y_bot)
 
     def _arrow_up(self, draw, cx, y_top, y_bot, active=True):
         if active:
             draw.line([(cx, y_bot), (cx, y_top + 14)], fill=BLACK, width=3)
             draw.polygon([(cx, y_top), (cx-10, y_top+16), (cx+10, y_top+16)], fill=BLACK)
         else:
-            self._dash_v(draw, cx, y_top + 8, y_bot)
-            draw.polygon([(cx, y_top), (cx-7, y_top+11), (cx+7, y_top+11)], fill=BLACK)
+            self._dash_v(draw, cx, y_top, y_bot)
 
     def _arrow_right(self, draw, x_left, x_right, cy, active=True):
         if active:
             draw.line([(x_left, cy), (x_right - 14, cy)], fill=BLACK, width=3)
             draw.polygon([(x_right, cy), (x_right-16, cy-10), (x_right-16, cy+10)], fill=BLACK)
         else:
-            self._dash_h(draw, x_left, x_right - 8, cy)
-            draw.polygon([(x_right, cy), (x_right-11, cy-7), (x_right-11, cy+7)], fill=BLACK)
+            self._dash_h(draw, x_left, x_right, cy)
 
     def _arrow_left(self, draw, x_left, x_right, cy, active=True):
         if active:
             draw.line([(x_right, cy), (x_left + 14, cy)], fill=BLACK, width=3)
             draw.polygon([(x_left, cy), (x_left+16, cy-10), (x_left+16, cy+10)], fill=BLACK)
         else:
-            self._dash_h(draw, x_left + 8, x_right, cy)
-            draw.polygon([(x_left, cy), (x_left+11, cy-7), (x_left+11, cy+7)], fill=BLACK)
+            self._dash_h(draw, x_left, x_right, cy)
 
     # ── Dashed line helpers ───────────────────────────────────────────────────
 

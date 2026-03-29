@@ -34,7 +34,7 @@ SYSTEM_LABEL = "VICTRON"
 #
 # Global offset for the entire power flow diagram
 DIAGRAM_X =   0
-DIAGRAM_Y =  70
+DIAGRAM_Y =  50
 
 def _pos(x, y):
     return (DIAGRAM_X + x, DIAGRAM_Y + y)
@@ -92,7 +92,7 @@ class EinkDashboard(hass.Hass):
         gap    = 8
         total  = icon_w + gap + text_w
         x      = (W - total) // 2
-        ty     = 46   # vertical center for icon + text
+        ty     = 22   # vertical center for icon + text
         draw.text((x, ty), "\U000F140B", font=f["icon"],   fill=BLACK, anchor="lm")
         draw.text((x + icon_w + gap, ty), "ENERGY", font=f["medium"], fill=BLACK, anchor="lm")
         draw.line([(20, ty + 22), (W - 20, ty + 22)], fill=BLACK, width=2)

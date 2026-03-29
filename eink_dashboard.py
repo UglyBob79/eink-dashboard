@@ -20,6 +20,11 @@ SENSOR_INVERTER_STATE = "sensor.victron_mqtt_vebus_274_vebus_inverter_state"
 
 SYSTEM_LABEL = "VICTRON"
 
+# Status entities
+STATUS_GRID_LOST = "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost"
+STATUS_CAT_BOX        = "binary_sensor.magnet_cat_box_contact"
+STATUS_CAT_BOX_DT     = "input_datetime.cat_box_last_emptied"
+
 # ── Layout ────────────────────────────────────────────────────────────────────
 #
 #  Diagram anchored top-left (~500x390px), leaving right + bottom for future use
@@ -34,7 +39,7 @@ SYSTEM_LABEL = "VICTRON"
 #
 # Global offset for the entire power flow diagram
 DIAGRAM_X =   0
-DIAGRAM_Y =  50
+DIAGRAM_Y =  30
 
 def _pos(x, y):
     return (DIAGRAM_X + x, DIAGRAM_Y + y)
@@ -51,7 +56,8 @@ class EinkDashboard(hass.Hass):
     def initialize(self):
         os.makedirs(OUT_DIR, exist_ok=True)
         self.fonts = self._load_fonts()
-        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD, SENSOR_INVERTER_STATE]:
+        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD, SENSOR_INVERTER_STATE,
+                  STATUS_GRID_LOST, STATUS_CAT_BOX_DT]:
             self.listen_state(self.on_update, s)
         self.generate()
 
@@ -153,6 +159,26 @@ class EinkDashboard(hass.Hass):
                   sub=f"{int(abs(battery_w))} W  ·  {batt_sub}")
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
+        # ── Statuses header ───────────────────────────────────────────────
+        sy = BATT_POS[1] + BATT_BOX[1] // 2 + 30
+        _iw = draw.textlength("\U000F02FC", font=f["icon"])
+        _tw = draw.textlength("STATUSES", font=f["medium"])
+        _sx = (W - (_iw + 8 + _tw)) // 2
+        draw.text((_sx, sy), "\U000F02FC", font=f["icon"],   fill=BLACK, anchor="lm")
+        draw.text((_sx + _iw + 8, sy), "STATUSES", font=f["medium"], fill=BLACK, anchor="lm")
+        draw.line([(20, sy + 22), (W - 20, sy + 22)], fill=BLACK, width=2)
+
+        # ── Status rows ───────────────────────────────────────────────────
+        row_y = sy + 22 + 26
+        grid_lost = self.get_state(STATUS_GRID_LOST) == "Alarm"
+        grid_val  = f"for {self._elapsed(STATUS_GRID_LOST)}" if grid_lost else f"OK · {self._elapsed(STATUS_GRID_LOST)}"
+        self._status_row(draw, f, row_y, "\U000F0D3E", "Grid lost", grid_val)
+        row_y += 28
+
+        cat_val = self._elapsed(STATUS_CAT_BOX_DT)
+        self._status_row(draw, f, row_y, "\U000F011B", "Cat box emptied", cat_val)
+        row_y += 28
+
         # ── 1-bit, no dithering ───────────────────────────────────────────
         img.convert("1", dither=Image.Dither.NONE).save(f"{OUT_DIR}/eink_page0.png")
         self.log("Rendered eink_page0.png")
@@ -241,6 +267,33 @@ class EinkDashboard(hass.Hass):
 
     # ── Utilities ─────────────────────────────────────────────────────────────
 
+    def _elapsed(self, entity):
+        """Return smart-unit string for time since entity last changed state."""
+        from datetime import datetime, timezone
+        raw = self.get_state(entity, attribute="last_changed")
+        if raw is None:
+            return "—"
+        if isinstance(raw, str):
+            from dateutil.parser import parse
+            dt = parse(raw)
+        else:
+            dt = raw
+        secs = max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
+        if secs < 60:
+            return f"{secs}s"
+        elif secs < 3600:
+            return f"{secs // 60}m"
+        elif secs < 86400:
+            return f"{secs // 3600}h"
+        else:
+            return f"{secs // 86400}d"
+
+    def _status_row(self, draw, f, y, icon, label, value, margin=20, gap=6):
+        """Draw a single status row: icon  label: value"""
+        iw = draw.textlength(icon, font=f["icon_sm"])
+        draw.text((margin, y), icon, font=f["icon_sm"], fill=BLACK, anchor="lm")
+        draw.text((margin + iw + gap, y), f"{label}: {value}", font=f["small"], fill=BLACK, anchor="lm")
+
     def _float(self, entity, default=0.0):
         try:
             return float(self.get_state(entity))
@@ -257,9 +310,10 @@ class EinkDashboard(hass.Hass):
                 "medium": ImageFont.truetype(bold, 22),
                 "small":  ImageFont.truetype(book, 13),
                 "label":  ImageFont.truetype(book, 12),
-                "icon":   ImageFont.truetype(mdi, 28),
+                "icon":    ImageFont.truetype(mdi, 28),
+                "icon_sm": ImageFont.truetype(mdi, 18),
             }
         except Exception as e:
             self.log(f"Font load failed, using default: {e}", level="WARNING")
             d = ImageFont.load_default()
-            return {"large": d, "medium": d, "small": d, "label": d, "icon": d}
+            return {"large": d, "medium": d, "small": d, "label": d, "icon": d, "icon_sm": d}

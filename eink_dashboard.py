@@ -57,12 +57,9 @@ class EinkDashboard(hass.Hass):
     def initialize(self):
         os.makedirs(OUT_DIR, exist_ok=True)
         self.fonts = self._load_fonts()
-        for s in [SENSOR_SOLAR, SENSOR_GRID, SENSOR_BATTERY, SENSOR_BATT_SOC, SENSOR_LOAD, SENSOR_INVERTER_STATE,
-                  STATUS_GRID_LOST, STATUS_CAT_BOX_DT, STATUS_POOL_PUMP]:
-            self.listen_state(self.on_update, s)
-        self.generate()
+        self.run_every(self._scheduled_render, "now", 60)
 
-    def on_update(self, entity, attribute, old, new, kwargs):
+    def _scheduled_render(self, kwargs):
         self.generate()
 
     def generate(self):
@@ -184,6 +181,11 @@ class EinkDashboard(hass.Hass):
         pump_val = f"for {self._elapsed(STATUS_POOL_PUMP)}" if pump_on else f"off · {self._elapsed(STATUS_POOL_PUMP)}"
         self._status_row(draw, f, row_y, "\U000F0606", "Pool pump", pump_val)
         row_y += 28
+
+        # ── Timestamp ─────────────────────────────────────────────────────
+        from datetime import datetime
+        ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
+        draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
         # ── 1-bit, no dithering ───────────────────────────────────────────
         img.convert("1", dither=Image.Dither.NONE).save(f"{OUT_DIR}/eink_page0.png")

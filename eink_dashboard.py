@@ -314,7 +314,7 @@ class EinkDashboard(hass.Hass):
         mdi = f"{self.fonts_dir}/materialdesignicons-webfont.ttf"
         try:
             return {
-                "large":  ImageFont.truetype(bold, 26),
+                "large":  ImageFont.truetype(bold, 24),
                 "medium": ImageFont.truetype(bold, 22),
                 "small":  ImageFont.truetype(book, 13),
                 "label":  ImageFont.truetype(book, 12),

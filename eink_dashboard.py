@@ -3,9 +3,7 @@ from PIL import Image, ImageDraw, ImageFont
 import os
 
 # Display: Waveshare 7.5" V2 portrait
-W, H     = 480, 800
-OUT_DIR  = "/homeassistant/www"
-FONTS_DIR = "/homeassistant/esphome/apps/dashboard/fonts"
+W, H = 480, 800
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -17,8 +15,6 @@ SENSOR_BATTERY  = "sensor.victron_mqtt_system_0_system_dc_battery_power"  # posi
 SENSOR_BATT_SOC = "sensor.victron_mqtt_system_0_system_dc_battery_soc"
 SENSOR_LOAD          = "sensor.victron_consumption"
 SENSOR_INVERTER_STATE = "sensor.victron_mqtt_vebus_274_vebus_inverter_state"
-
-SYSTEM_LABEL = "VICTRON"
 
 # Status entities
 STATUS_GRID_LOST = "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost"
@@ -55,9 +51,13 @@ BATT_POS   = _pos(240, 355);  BATT_BOX   = (160,  90)
 class EinkDashboard(hass.Hass):
 
     def initialize(self):
-        os.makedirs(OUT_DIR, exist_ok=True)
+        self.out_dir    = self.args.get("out_dir",    "/homeassistant/www")
+        self.fonts_dir  = self.args.get("fonts_dir",  "/homeassistant/esphome/apps/dashboard/fonts")
+        self.system_label = self.args.get("system_label", "SYSTEM")
+        interval        = self.args.get("render_interval", 60)
+        os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
-        self.run_every(self._scheduled_render, "now", 60)
+        self.run_every(self._scheduled_render, "now", interval)
 
     def _scheduled_render(self, kwargs):
         self.generate()
@@ -140,7 +140,7 @@ class EinkDashboard(hass.Hass):
                   filled=solar_on)
 
         self._box(draw, f, *SYSTEM_POS, *SYSTEM_BOX,
-                  "SYSTEM", SYSTEM_LABEL,
+                  "SYSTEM", self.system_label,
                   sub=inverter_state.upper(),
                   filled=True)  # inverter hub — always highlighted
 
@@ -188,7 +188,7 @@ class EinkDashboard(hass.Hass):
         draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
         # ── 1-bit, no dithering ───────────────────────────────────────────
-        img.convert("1", dither=Image.Dither.NONE).save(f"{OUT_DIR}/eink_page0.png")
+        img.convert("1", dither=Image.Dither.NONE).save(f"{self.out_dir}/eink_page0.png")
         self.log("Rendered eink_page0.png")
 
     # ── Box ───────────────────────────────────────────────────────────────────
@@ -309,9 +309,9 @@ class EinkDashboard(hass.Hass):
             return default
 
     def _load_fonts(self):
-        bold = f"{FONTS_DIR}/GothamRnd-Bold.ttf"
-        book = f"{FONTS_DIR}/GothamRnd-Book.ttf"
-        mdi = f"{FONTS_DIR}/materialdesignicons-webfont.ttf"
+        bold = f"{self.fonts_dir}/GothamRnd-Bold.ttf"
+        book = f"{self.fonts_dir}/GothamRnd-Book.ttf"
+        mdi = f"{self.fonts_dir}/materialdesignicons-webfont.ttf"
         try:
             return {
                 "large":  ImageFont.truetype(bold, 26),

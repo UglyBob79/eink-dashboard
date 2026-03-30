@@ -144,9 +144,17 @@ class EinkDashboard(hass.Hass):
                   sub=inverter_state.upper(),
                   filled=True)  # inverter hub — always highlighted
 
+        grid_lost = self.get_state(STATUS_GRID_LOST) == "Alarm"
+        grid_sub  = "LOST" if grid_lost else ("IMPORT" if importing else ("EXPORT" if exporting else "IDLE"))
         self._box(draw, f, *GRID_POS, *GRID_BOX,
                   "GRID", f"{int(abs(grid_w))} W",
-                  sub="IMPORT" if importing else ("EXPORT" if exporting else "IDLE"))
+                  sub=grid_sub)
+        if grid_lost:
+            bx = GRID_POS[0] + GRID_BOX[0] // 2 - 5
+            by = GRID_POS[1] + GRID_BOX[1] // 2 - 5
+            r  = 16
+            draw.ellipse([bx - r, by - r, bx + r, by + r], fill=BLACK, outline=WHITE, width=2)
+            draw.text((bx, by), "\U000F0028", font=f["icon"], fill=WHITE, anchor="mm")
 
         self._box(draw, f, *HOME_POS, *HOME_BOX,
                   "HOME", f"{int(load_w)} W")

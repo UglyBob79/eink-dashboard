@@ -83,12 +83,19 @@ class EinkDashboard(hass.Hass):
         inverter_state = self.get_state(SENSOR_INVERTER_STATE) or ""
 
         # Flow logic
-        solar_on     = solar_w   >  50
-        load_on      = load_w    >  50
-        importing    = grid_w    >  50   # grid → system
-        exporting    = grid_w    < -50   # system → grid
-        charging     = battery_w < -50   # system → battery
-        discharging  = battery_w >  50   # battery → system
+        solar_on    = solar_w   >  50
+        load_on     = load_w    >  50
+        charging    = battery_w < -50   # system → battery
+        discharging = battery_w >  50   # battery → system
+
+        if self.get_state(STATUS_GRID_LOST) == "Alarm":
+            grid_state = "LOST"
+        elif grid_w > 50:
+            grid_state = "IMPORT"
+        elif grid_w < -50:
+            grid_state = "EXPORT"
+        else:
+            grid_state = "IDLE"
 
         # ── Title ─────────────────────────────────────────────────────────
         icon_w = draw.textlength("\U000F140B", font=f["icon"])  # mdi-lightning-bolt
@@ -113,10 +120,12 @@ class EinkDashboard(hass.Hass):
         # Grid ↔ System (horizontal)
         x_gap_left  = GRID_POS[0]   + GRID_BOX[0]   // 2
         x_gap_right = SYSTEM_POS[0] - SYSTEM_BOX[0] // 2
-        if importing:
+        if grid_state == "IMPORT":
             self._arrow_right(draw, x_gap_left, x_gap_right, GRID_POS[1], active=True)
+        elif grid_state == "EXPORT":
+            self._arrow_left(draw, x_gap_left, x_gap_right, GRID_POS[1], active=True)
         else:
-            self._arrow_left(draw, x_gap_left, x_gap_right, GRID_POS[1], active=exporting)
+            self._arrow_left(draw, x_gap_left, x_gap_right, GRID_POS[1], active=False)
 
         # System → Home (right)
         self._arrow_right(draw,
@@ -144,12 +153,10 @@ class EinkDashboard(hass.Hass):
                   sub=inverter_state.upper(),
                   filled=True)  # inverter hub — always highlighted
 
-        grid_lost = self.get_state(STATUS_GRID_LOST) == "Alarm"
-        grid_sub  = "LOST" if grid_lost else ("IMPORT" if importing else ("EXPORT" if exporting else "IDLE"))
         self._box(draw, f, *GRID_POS, *GRID_BOX,
                   "GRID", f"{int(abs(grid_w))} W",
-                  sub=grid_sub)
-        if grid_lost:
+                  sub=grid_state)
+        if grid_state == "LOST":
             bx = GRID_POS[0] + GRID_BOX[0] // 2 - 5
             by = GRID_POS[1] + GRID_BOX[1] // 2 - 5
             r  = 16
@@ -176,8 +183,7 @@ class EinkDashboard(hass.Hass):
 
         # ── Status rows ───────────────────────────────────────────────────
         row_y = sy + 22 + 26
-        grid_lost = self.get_state(STATUS_GRID_LOST) == "Alarm"
-        grid_val  = f"for {self._elapsed(STATUS_GRID_LOST)}" if grid_lost else f"OK · {self._elapsed(STATUS_GRID_LOST)}"
+        grid_val  = f"for {self._elapsed(STATUS_GRID_LOST)}" if grid_state == "LOST" else f"OK · {self._elapsed(STATUS_GRID_LOST)}"
         self._status_row(draw, f, row_y, "\U000F0D3E", "Grid lost", grid_val)
         row_y += 32
 

@@ -171,16 +171,16 @@ class EinkDashboard(hass.Hass):
         grid_lost = self.get_state(STATUS_GRID_LOST) == "Alarm"
         grid_val  = f"for {self._elapsed(STATUS_GRID_LOST)}" if grid_lost else f"OK · {self._elapsed(STATUS_GRID_LOST)}"
         self._status_row(draw, f, row_y, "\U000F0D3E", "Grid lost", grid_val)
-        row_y += 28
+        row_y += 32
 
         cat_val = self._elapsed(STATUS_CAT_BOX_DT)
         self._status_row(draw, f, row_y, "\U000F011B", "Cat box emptied", cat_val)
-        row_y += 28
+        row_y += 32
 
         pump_on  = self.get_state(STATUS_POOL_PUMP) == "on"
         pump_val = f"for {self._elapsed(STATUS_POOL_PUMP)}" if pump_on else f"off · {self._elapsed(STATUS_POOL_PUMP)}"
         self._status_row(draw, f, row_y, "\U000F0606", "Pool pump", pump_val)
-        row_y += 28
+        row_y += 32
 
         # ── Timestamp ─────────────────────────────────────────────────────
         from datetime import datetime
@@ -301,7 +301,7 @@ class EinkDashboard(hass.Hass):
         """Draw a single status row: icon  label: value"""
         iw = draw.textlength(icon, font=f["icon_sm"])
         draw.text((margin, y), icon, font=f["icon_sm"], fill=BLACK, anchor="lm")
-        draw.text((margin + iw + gap, y), f"{label}: {value}", font=f["small"], fill=BLACK, anchor="lm")
+        draw.text((margin + iw + gap, y), f"{label}: {value}", font=f["status_text"], fill=BLACK, anchor="lm")
 
     def _float(self, entity, default=0.0):
         try:
@@ -319,10 +319,11 @@ class EinkDashboard(hass.Hass):
                 "medium": ImageFont.truetype(bold, 22),
                 "small":  ImageFont.truetype(book, 13),
                 "label":  ImageFont.truetype(book, 12),
-                "icon":    ImageFont.truetype(mdi, 28),
-                "icon_sm": ImageFont.truetype(mdi, 18),
+                "icon":        ImageFont.truetype(mdi, 28),
+                "icon_sm":     ImageFont.truetype(mdi, 22),
+                "status_text": ImageFont.truetype(book, 15),
             }
         except Exception as e:
             self.log(f"Font load failed, using default: {e}", level="WARNING")
             d = ImageFont.load_default()
-            return {"large": d, "medium": d, "small": d, "label": d, "icon": d, "icon_sm": d}
+            return {"large": d, "medium": d, "small": d, "label": d, "icon": d, "icon_sm": d, "status_text": d}

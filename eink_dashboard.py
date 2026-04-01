@@ -201,9 +201,21 @@ class EinkDashboard(hass.Hass):
         ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
         draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
-        # ── 1-bit, no dithering ───────────────────────────────────────────
-        img.convert("1", dither=Image.Dither.NONE).save(f"{self.out_dir}/eink_page0.png")
-        self.log("Rendered eink_page0.png")
+        # ── PNG: portrait, human-readable RGB ────────────────────────────
+        img.save(f"{self.out_dir}/eink_page0.png")
+        img_l = img.convert("L")
+
+        # ── BIN: landscape, for ESP direct buffer write ───────────────────
+        # Rotate grayscale BEFORE thresholding to avoid PIL re-thresholding
+        # at 128 (which causes noise). ROTATE_270 = 90° CW matches the
+        # physical 800×480 buffer layout (no rotation needed in ESPHome).
+        # No XOR inversion — the waveshare V2 driver sends ~buffer[i],
+        # so ESPHome's buffer convention (1=black) is already correct.
+        img_land_l = img_l.transpose(Image.ROTATE_270)
+        img_land_1bit = img_land_l.point(lambda x: 255 if x > 128 else 0, "1")
+        with open(f"{self.out_dir}/eink_page0.bin", "wb") as fh:
+            fh.write(img_land_1bit.tobytes())
+        self.log("Rendered eink_page0.png + eink_page0.bin")
 
     # ── Box ───────────────────────────────────────────────────────────────────
 
@@ -335,7 +347,7 @@ class EinkDashboard(hass.Hass):
                 "label":  ImageFont.truetype(book, 12),
                 "icon":        ImageFont.truetype(mdi, 28),
                 "icon_sm":     ImageFont.truetype(mdi, 22),
-                "status_text": ImageFont.truetype(book, 15),
+                "status_text": ImageFont.truetype(book, 18),
             }
         except Exception as e:
             self.log(f"Font load failed, using default: {e}", level="WARNING")

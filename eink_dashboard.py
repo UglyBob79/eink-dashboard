@@ -45,12 +45,16 @@ class EinkDashboard(hass.Hass):
         os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
 
+        self.show_energy_today = self.args.get("show_energy_today", False)
+
         required = [
             "sensor_solar", "sensor_grid", "sensor_battery", "sensor_batt_soc",
             "sensor_load", "sensor_inverter_state",
-            "sensor_solar_today", "sensor_import_daily", "sensor_export_daily",
             "status_grid_lost", "status_cat_box", "status_cat_box_dt", "status_pool_pump",
         ]
+        if self.show_energy_today:
+            required += ["sensor_solar_today", "sensor_import_daily", "sensor_export_daily"]
+
         missing = [k for k in required if k not in self.args]
         if missing:
             self.log(f"Missing required config keys: {missing}", level="ERROR")
@@ -63,9 +67,9 @@ class EinkDashboard(hass.Hass):
         self.sensor_batt_soc       = self.args["sensor_batt_soc"]
         self.sensor_load           = self.args["sensor_load"]
         self.sensor_inverter_state = self.args["sensor_inverter_state"]
-        self.sensor_solar_today    = self.args["sensor_solar_today"]
-        self.sensor_import_daily   = self.args["sensor_import_daily"]
-        self.sensor_export_daily   = self.args["sensor_export_daily"]
+        self.sensor_solar_today    = self.args.get("sensor_solar_today")
+        self.sensor_import_daily   = self.args.get("sensor_import_daily")
+        self.sensor_export_daily   = self.args.get("sensor_export_daily")
         self.status_grid_lost      = self.args["status_grid_lost"]
         self.status_cat_box        = self.args["status_cat_box"]
         self.status_cat_box_dt     = self.args["status_cat_box_dt"]
@@ -92,10 +96,11 @@ class EinkDashboard(hass.Hass):
         entities = [
             self.sensor_solar, self.sensor_grid, self.sensor_battery,
             self.sensor_batt_soc, self.sensor_load, self.sensor_inverter_state,
-            self.sensor_solar_today, self.sensor_import_daily, self.sensor_export_daily,
             self.status_grid_lost, self.status_cat_box, self.status_cat_box_dt,
             self.status_pool_pump,
         ]
+        if self.show_energy_today:
+            entities += [self.sensor_solar_today, self.sensor_import_daily, self.sensor_export_daily]
         bad = []
         for e in entities:
             state = self.get_state(e)
@@ -235,38 +240,42 @@ class EinkDashboard(hass.Hass):
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
         # ── Energy today strip (below battery, above statuses) ───────────
-        solar_today  = self._float(self.sensor_solar_today)
-        import_today = self._float(self.sensor_import_daily)
-        export_today = self._float(self.sensor_export_daily)
-        used_today   = max(0.0, import_today - export_today)
+        if self.show_energy_today:
+            solar_today  = self._float(self.sensor_solar_today)
+            import_today = self._float(self.sensor_import_daily)
+            export_today = self._float(self.sensor_export_daily)
+            used_today   = max(0.0, import_today - export_today)
 
-        strip_x0, strip_y0 = 20, 438
-        strip_x1, strip_y1 = 460, 500
-        col_w = (strip_x1 - strip_x0) // 4
-        draw.rounded_rectangle([strip_x0, strip_y0, strip_x1, strip_y1],
-                                radius=10, fill=WHITE, outline=BLACK, width=2)
+            strip_x0, strip_y0 = 20, 438
+            strip_x1, strip_y1 = 460, 500
+            col_w = (strip_x1 - strip_x0) // 4
+            draw.rounded_rectangle([strip_x0, strip_y0, strip_x1, strip_y1],
+                                    radius=10, fill=WHITE, outline=BLACK, width=2)
 
-        energy_cols = [
-            ("SOLAR",  f"{solar_today:.1f} kWh"),
-            ("IMPORT", f"{import_today:.1f} kWh"),
-            ("EXPORT", f"{export_today:.1f} kWh"),
-            ("NET",    f"{used_today:.1f} kWh"),
-        ]
-        hdr_h = 22   # height of the label row
-        for i, (lbl, val) in enumerate(energy_cols):
-            cx = strip_x0 + col_w * i + col_w // 2
-            if i > 0:
-                div_x = strip_x0 + col_w * i
-                draw.line([(div_x, strip_y0 + 4), (div_x, strip_y1 - 4)], fill=BLACK, width=1)
-            draw.text((cx, strip_y0 + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
-            draw.line([(strip_x0 + col_w * i + 4,     strip_y0 + hdr_h),
-                        (strip_x0 + col_w * (i + 1) - 4, strip_y0 + hdr_h)],
-                       fill=BLACK, width=1)
-            val_cy = strip_y0 + hdr_h + (strip_y1 - strip_y0 - hdr_h) // 2
-            draw.text((cx, val_cy), val, font=f["medium"], fill=BLACK, anchor="mm")
+            energy_cols = [
+                ("SOLAR",  f"{solar_today:.1f} kWh"),
+                ("IMPORT", f"{import_today:.1f} kWh"),
+                ("EXPORT", f"{export_today:.1f} kWh"),
+                ("NET",    f"{used_today:.1f} kWh"),
+            ]
+            hdr_h = 22
+            for i, (lbl, val) in enumerate(energy_cols):
+                cx = strip_x0 + col_w * i + col_w // 2
+                if i > 0:
+                    div_x = strip_x0 + col_w * i
+                    draw.line([(div_x, strip_y0 + 4), (div_x, strip_y1 - 4)], fill=BLACK, width=1)
+                draw.text((cx, strip_y0 + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
+                draw.line([(strip_x0 + col_w * i + 4,     strip_y0 + hdr_h),
+                            (strip_x0 + col_w * (i + 1) - 4, strip_y0 + hdr_h)],
+                           fill=BLACK, width=1)
+                val_cy = strip_y0 + hdr_h + (strip_y1 - strip_y0 - hdr_h) // 2
+                draw.text((cx, val_cy), val, font=f["medium"], fill=BLACK, anchor="mm")
+            statuses_y = strip_y1 + 22
+        else:
+            statuses_y = BATT_POS[1] + BATT_BOX[1] // 2 + 30
 
         # ── Statuses header ───────────────────────────────────────────────
-        sy = strip_y1 + 22
+        sy = statuses_y
         _iw = draw.textlength("\U000F02FC", font=f["icon"])
         _tw = draw.textlength("STATUSES", font=f["medium"])
         _sx = (W - (_iw + 8 + _tw)) // 2

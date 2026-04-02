@@ -44,7 +44,8 @@ eink_dashboard:
   sensor_load: sensor.your_home_load
   sensor_inverter_state: sensor.your_inverter_state
 
-  # Daily energy sensors
+  # Daily energy strip (optional, omit or set false to hide)
+  show_energy_today: true
   sensor_solar_today: sensor.your_solar_today
   sensor_import_daily: sensor.your_grid_import_daily
   sensor_export_daily: sensor.your_grid_export_daily

@@ -8,24 +8,6 @@ W, H = 480, 800
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
-# Victron sensors
-SENSOR_SOLAR    = "sensor.victron_mqtt_system_0_system_dc_pv_power"
-SENSOR_GRID     = "sensor.victron_grid_power"        # positive=import, negative=export
-SENSOR_BATTERY  = "sensor.victron_mqtt_system_0_system_dc_battery_power"  # positive=discharge
-SENSOR_BATT_SOC = "sensor.victron_mqtt_system_0_system_dc_battery_soc"
-SENSOR_LOAD          = "sensor.victron_consumption"
-SENSOR_INVERTER_STATE = "sensor.victron_mqtt_vebus_274_vebus_inverter_state"
-
-# Daily energy sensors
-SENSOR_SOLAR_TODAY   = "sensor.victron_mqtt_solarcharger_288_solarcharger_yield_today"
-SENSOR_IMPORT_DAILY  = "sensor.grid_import_daily"
-SENSOR_EXPORT_DAILY  = "sensor.grid_export_daily"
-
-# Status entities
-STATUS_GRID_LOST = "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost"
-STATUS_CAT_BOX        = "binary_sensor.magnet_cat_box_contact"
-STATUS_CAT_BOX_DT     = "input_datetime.cat_box_last_emptied"
-STATUS_POOL_PUMP      = "switch.poolpump1_relay"
 
 # ── Layout ────────────────────────────────────────────────────────────────────
 #
@@ -56,10 +38,30 @@ BATT_POS   = _pos(240, 355);  BATT_BOX   = (160,  90)
 class EinkDashboard(hass.Hass):
 
     def initialize(self):
-        self.out_dir    = self.args.get("out_dir",    "/homeassistant/www")
-        self.fonts_dir  = self.args.get("fonts_dir",  "/homeassistant/esphome/apps/dashboard/fonts")
+        self.out_dir      = self.args.get("out_dir",    "/homeassistant/www")
+        self.fonts_dir    = self.args.get("fonts_dir",  "/homeassistant/esphome/apps/dashboard/fonts")
         self.system_label = self.args.get("system_label", "SYSTEM")
-        interval        = self.args.get("render_interval", 60)
+        interval          = self.args.get("render_interval", 60)
+
+        # Power sensors
+        self.sensor_solar    = self.args.get("sensor_solar",    "sensor.victron_mqtt_system_0_system_dc_pv_power")
+        self.sensor_grid     = self.args.get("sensor_grid",     "sensor.victron_grid_power")
+        self.sensor_battery  = self.args.get("sensor_battery",  "sensor.victron_mqtt_system_0_system_dc_battery_power")
+        self.sensor_batt_soc = self.args.get("sensor_batt_soc", "sensor.victron_mqtt_system_0_system_dc_battery_soc")
+        self.sensor_load     = self.args.get("sensor_load",     "sensor.victron_consumption")
+        self.sensor_inverter_state = self.args.get("sensor_inverter_state", "sensor.victron_mqtt_vebus_274_vebus_inverter_state")
+
+        # Daily energy sensors
+        self.sensor_solar_today  = self.args.get("sensor_solar_today",  "sensor.victron_mqtt_solarcharger_288_solarcharger_yield_today")
+        self.sensor_import_daily = self.args.get("sensor_import_daily", "sensor.grid_import_daily")
+        self.sensor_export_daily = self.args.get("sensor_export_daily", "sensor.grid_export_daily")
+
+        # Status entities
+        self.status_grid_lost = self.args.get("status_grid_lost", "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost")
+        self.status_cat_box   = self.args.get("status_cat_box",   "binary_sensor.magnet_cat_box_contact")
+        self.status_cat_box_dt = self.args.get("status_cat_box_dt", "input_datetime.cat_box_last_emptied")
+        self.status_pool_pump = self.args.get("status_pool_pump", "switch.poolpump1_relay")
+
         os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
         self.run_every(self._scheduled_render, "now", interval)
@@ -80,12 +82,12 @@ class EinkDashboard(hass.Hass):
         draw = ImageDraw.Draw(img)
         f    = self.fonts
 
-        solar_w   = self._float(SENSOR_SOLAR)
-        grid_w    = self._float(SENSOR_GRID)
-        battery_w = self._float(SENSOR_BATTERY)
-        soc       = self._float(SENSOR_BATT_SOC)
-        load_w         = self._float(SENSOR_LOAD)
-        inverter_state = self.get_state(SENSOR_INVERTER_STATE) or ""
+        solar_w   = self._float(self.sensor_solar)
+        grid_w    = self._float(self.sensor_grid)
+        battery_w = self._float(self.sensor_battery)
+        soc       = self._float(self.sensor_batt_soc)
+        load_w         = self._float(self.sensor_load)
+        inverter_state = self.get_state(self.sensor_inverter_state) or ""
 
         # Flow logic
         solar_on    = solar_w   >  50
@@ -93,7 +95,7 @@ class EinkDashboard(hass.Hass):
         charging    = battery_w < -50   # system → battery
         discharging = battery_w >  50   # battery → system
 
-        if self.get_state(STATUS_GRID_LOST) == "Alarm":
+        if self.get_state(self.status_grid_lost) == "Alarm":
             grid_state = "LOST"
         elif grid_w > 50:
             grid_state = "IMPORT"
@@ -180,9 +182,9 @@ class EinkDashboard(hass.Hass):
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
         # ── Energy today strip (below battery, above statuses) ───────────
-        solar_today  = self._float(SENSOR_SOLAR_TODAY)
-        import_today = self._float(SENSOR_IMPORT_DAILY)
-        export_today = self._float(SENSOR_EXPORT_DAILY)
+        solar_today  = self._float(self.sensor_solar_today)
+        import_today = self._float(self.sensor_import_daily)
+        export_today = self._float(self.sensor_export_daily)
         used_today   = max(0.0, import_today - export_today)
 
         strip_x0, strip_y0 = 20, 438
@@ -221,16 +223,16 @@ class EinkDashboard(hass.Hass):
 
         # ── Status rows ───────────────────────────────────────────────────
         row_y = sy + 22 + 26
-        grid_val  = f"for {self._elapsed(STATUS_GRID_LOST)}" if grid_state == "LOST" else f"OK · {self._elapsed(STATUS_GRID_LOST)}"
+        grid_val  = f"for {self._elapsed(self.status_grid_lost)}" if grid_state == "LOST" else f"OK · {self._elapsed(self.status_grid_lost)}"
         self._status_row(draw, f, row_y, "\U000F0D3E", "Grid lost", grid_val)
         row_y += 32
 
-        cat_val = self._elapsed(STATUS_CAT_BOX_DT)
+        cat_val = self._elapsed(self.status_cat_box_dt)
         self._status_row(draw, f, row_y, "\U000F011B", "Cat box emptied", cat_val)
         row_y += 32
 
-        pump_on  = self.get_state(STATUS_POOL_PUMP) == "on"
-        pump_val = f"for {self._elapsed(STATUS_POOL_PUMP)}" if pump_on else f"off · {self._elapsed(STATUS_POOL_PUMP)}"
+        pump_on  = self.get_state(self.status_pool_pump) == "on"
+        pump_val = f"for {self._elapsed(self.status_pool_pump)}" if pump_on else f"off · {self._elapsed(self.status_pool_pump)}"
         self._status_row(draw, f, row_y, "\U000F0606", "Pool pump", pump_val)
         row_y += 32
 

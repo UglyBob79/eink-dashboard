@@ -35,6 +35,25 @@ eink_dashboard:
   fonts_dir: /homeassistant/esphome/apps/dashboard/fonts
   system_label: "YOUR SYSTEM"
   render_interval: 60
+
+  # Power sensors (all have defaults matching a Victron/MQTT setup)
+  sensor_solar: sensor.victron_mqtt_system_0_system_dc_pv_power
+  sensor_grid: sensor.victron_grid_power
+  sensor_battery: sensor.victron_mqtt_system_0_system_dc_battery_power
+  sensor_batt_soc: sensor.victron_mqtt_system_0_system_dc_battery_soc
+  sensor_load: sensor.victron_consumption
+  sensor_inverter_state: sensor.victron_mqtt_vebus_274_vebus_inverter_state
+
+  # Daily energy sensors
+  sensor_solar_today: sensor.victron_mqtt_solarcharger_288_solarcharger_yield_today
+  sensor_import_daily: sensor.grid_import_daily
+  sensor_export_daily: sensor.grid_export_daily
+
+  # Status entities
+  status_grid_lost: sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost
+  status_cat_box: binary_sensor.magnet_cat_box_contact
+  status_cat_box_dt: input_datetime.cat_box_last_emptied
+  status_pool_pump: switch.poolpump1_relay
 ```
 
 ### Fonts

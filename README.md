@@ -1,6 +1,6 @@
 # eink-dashboard
 
-An AppDaemon app for Home Assistant that renders a power flow dashboard on a Waveshare 7.5" V2 e-paper display driven by an ESP32.
+An AppDaemon app for Home Assistant that renders a power flow dashboard as a 480×800 image for any e-paper display, for instance a Waveshare 7.5" V2 driven by an ESP32.
 
 ## Overview
 

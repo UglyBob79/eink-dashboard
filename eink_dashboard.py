@@ -240,12 +240,32 @@ class PowerDiagram(Component):
             x += dash + gap
 
 
+@_register("section_header")
+class SectionHeader(Component):
+    def __init__(self, config, hass):
+        self._hass  = hass
+        self._title = config["title"]
+        self._icon  = config.get("icon")
+
+    def render(self, draw, fonts, y):
+        return self._hass._render_section_header(draw, fonts, y, self._icon, self._title)
+
+
+@_register("divider")
+class Divider(Component):
+    def __init__(self, config, hass):
+        self._spacing = config.get("spacing", 10)
+
+    def render(self, draw, fonts, y):
+        mid = y + self._spacing // 2
+        draw.line([(20, mid), (W - 20, mid)], fill=BLACK, width=1)
+        return y + self._spacing
+
+
 @_register("status_list")
 class StatusList(Component):
     def __init__(self, config, hass):
         self._hass  = hass
-        self._title = config.get("title", "STATUSES")
-        self._icon  = config.get("icon", "\U000F02FC")
         self._items = config.get("items", [])
 
     def entities(self):
@@ -253,7 +273,6 @@ class StatusList(Component):
 
     def render(self, draw, fonts, y):
         hass = self._hass
-        y = hass._render_section_header(draw, fonts, y, self._icon, self._title)
         y += 26
         for item in self._items:
             value = self._resolve_value(item["entity"], item.get("value", "state"))
@@ -413,11 +432,15 @@ class EinkDashboard(hass.Hass):
     # ── Shared rendering helpers (called by components via hass) ──────────────
 
     def _render_section_header(self, draw, fonts, y, icon, title):
-        icon_w = draw.textlength(icon, font=fonts["icon"])
-        text_w = draw.textlength(title, font=fonts["medium"])
-        x = (W - (icon_w + 8 + text_w)) // 2
-        draw.text((x, y), icon, font=fonts["icon"], fill=BLACK, anchor="lm")
-        draw.text((x + icon_w + 8, y), title, font=fonts["medium"], fill=BLACK, anchor="lm")
+        if icon:
+            icon_w  = draw.textlength(icon, font=fonts["icon"])
+            total_w = icon_w + 8 + draw.textlength(title, font=fonts["medium"])
+            x = (W - total_w) // 2
+            draw.text((x, y), icon, font=fonts["icon"], fill=BLACK, anchor="lm")
+            draw.text((x + icon_w + 8, y), title, font=fonts["medium"], fill=BLACK, anchor="lm")
+        else:
+            x = (W - draw.textlength(title, font=fonts["medium"])) // 2
+            draw.text((x, y), title, font=fonts["medium"], fill=BLACK, anchor="lm")
         draw.line([(20, y + 22), (W - 20, y + 22)], fill=BLACK, width=2)
         return y + 22
 

@@ -12,7 +12,7 @@ The app generates a 480×800 portrait image every 60 seconds showing:
 
 The image is saved as both a human-readable PNG and a 1-bit BIN file. The ESP32 fetches the BIN over HTTP and writes it directly to the display buffer.
 
-## Hardware
+## Suggested Hardware
 
 - Waveshare 7.5" e-Paper HAT V2 (800×480, UC8179 controller, model `7.50inV2alt` in ESPHome)
 - ESP32

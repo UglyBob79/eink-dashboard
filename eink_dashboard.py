@@ -163,15 +163,7 @@ class EinkDashboard(hass.Hass):
             grid_state = "IDLE"
 
         # ── Title ─────────────────────────────────────────────────────────
-        icon_w = draw.textlength("\U000F140B", font=f["icon"])  # mdi-lightning-bolt
-        text_w = draw.textlength("ENERGY", font=f["medium"])
-        gap    = 8
-        total  = icon_w + gap + text_w
-        x      = (W - total) // 2
-        ty     = 22   # vertical center for icon + text
-        draw.text((x, ty), "\U000F140B", font=f["icon"],   fill=BLACK, anchor="lm")
-        draw.text((x + icon_w + gap, ty), "ENERGY", font=f["medium"], fill=BLACK, anchor="lm")
-        draw.line([(20, ty + 22), (W - 20, ty + 22)], fill=BLACK, width=2)
+        self._render_section_header(draw, f, 22, "\U000F140B", "ENERGY")
 
         # ── Arrows (drawn before boxes so box borders cover line ends) ────
 
@@ -239,64 +231,22 @@ class EinkDashboard(hass.Hass):
                   filled=discharging)
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
-        # ── Energy today strip (below battery, above statuses) ───────────
-        if self.show_energy_today:
-            solar_today  = self._float(self.sensor_solar_today)
-            import_today = self._float(self.sensor_import_daily)
-            export_today = self._float(self.sensor_export_daily)
-            used_today   = max(0.0, import_today - export_today)
-
-            strip_x0, strip_y0 = 20, 438
-            strip_x1, strip_y1 = 460, 500
-            col_w = (strip_x1 - strip_x0) // 4
-            draw.rounded_rectangle([strip_x0, strip_y0, strip_x1, strip_y1],
-                                    radius=10, fill=WHITE, outline=BLACK, width=2)
-
-            energy_cols = [
-                ("SOLAR",  f"{solar_today:.1f} kWh"),
-                ("IMPORT", f"{import_today:.1f} kWh"),
-                ("EXPORT", f"{export_today:.1f} kWh"),
-                ("NET",    f"{used_today:.1f} kWh"),
-            ]
-            hdr_h = 22
-            for i, (lbl, val) in enumerate(energy_cols):
-                cx = strip_x0 + col_w * i + col_w // 2
-                if i > 0:
-                    div_x = strip_x0 + col_w * i
-                    draw.line([(div_x, strip_y0 + 4), (div_x, strip_y1 - 4)], fill=BLACK, width=1)
-                draw.text((cx, strip_y0 + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
-                draw.line([(strip_x0 + col_w * i + 4,     strip_y0 + hdr_h),
-                            (strip_x0 + col_w * (i + 1) - 4, strip_y0 + hdr_h)],
-                           fill=BLACK, width=1)
-                val_cy = strip_y0 + hdr_h + (strip_y1 - strip_y0 - hdr_h) // 2
-                draw.text((cx, val_cy), val, font=f["medium"], fill=BLACK, anchor="mm")
-            statuses_y = strip_y1 + 22
-        else:
-            statuses_y = BATT_POS[1] + BATT_BOX[1] // 2 + 30
-
-        # ── Statuses header ───────────────────────────────────────────────
-        sy = statuses_y
-        _iw = draw.textlength("\U000F02FC", font=f["icon"])
-        _tw = draw.textlength("STATUSES", font=f["medium"])
-        _sx = (W - (_iw + 8 + _tw)) // 2
-        draw.text((_sx, sy), "\U000F02FC", font=f["icon"],   fill=BLACK, anchor="lm")
-        draw.text((_sx + _iw + 8, sy), "STATUSES", font=f["medium"], fill=BLACK, anchor="lm")
-        draw.line([(20, sy + 22), (W - 20, sy + 22)], fill=BLACK, width=2)
-
-        # ── Status rows ───────────────────────────────────────────────────
-        row_y = sy + 22 + 26
-        grid_val  = f"for {self._elapsed(self.status_grid_lost)}" if grid_state == "LOST" else f"OK · {self._elapsed(self.status_grid_lost)}"
-        self._status_row(draw, f, row_y, "\U000F0D3E", "Grid lost", grid_val)
-        row_y += 32
-
-        cat_val = self._elapsed(self.status_cat_box_dt)
-        self._status_row(draw, f, row_y, "\U000F011B", "Cat box emptied", cat_val)
-        row_y += 32
-
+        # ── Sections below the diagram ────────────────────────────────────
+        grid_val = f"for {self._elapsed(self.status_grid_lost)}" if grid_state == "LOST" else f"OK · {self._elapsed(self.status_grid_lost)}"
         pump_on  = self.get_state(self.status_pool_pump) == "on"
         pump_val = f"for {self._elapsed(self.status_pool_pump)}" if pump_on else f"off · {self._elapsed(self.status_pool_pump)}"
-        self._status_row(draw, f, row_y, "\U000F0606", "Pool pump", pump_val)
-        row_y += 32
+        statuses = [
+            ("\U000F0D3E", "Grid lost",        grid_val),
+            ("\U000F011B", "Cat box emptied",  self._elapsed(self.status_cat_box_dt)),
+            ("\U000F0606", "Pool pump",         pump_val),
+        ]
+
+        batt_bottom = BATT_POS[1] + BATT_BOX[1] // 2
+        if self.show_energy_today:
+            y = self._render_energy_strip(draw, f, batt_bottom + 8)
+        else:
+            y = batt_bottom + 30
+        y = self._render_statuses(draw, f, y, statuses)
 
         # ── Timestamp ─────────────────────────────────────────────────────
         from datetime import datetime
@@ -318,6 +268,50 @@ class EinkDashboard(hass.Hass):
         with open(f"{self.out_dir}/eink_page0.bin", "wb") as fh:
             fh.write(img_land_1bit.tobytes())
         self.log("Rendered eink_page0.png + eink_page0.bin")
+
+    # ── Box ───────────────────────────────────────────────────────────────────
+
+    # ── Section renderers (each takes y, returns y after content) ────────────
+
+    def _render_section_header(self, draw, f, y, icon, title):
+        icon_w = draw.textlength(icon, font=f["icon"])
+        text_w = draw.textlength(title, font=f["medium"])
+        x = (W - (icon_w + 8 + text_w)) // 2
+        draw.text((x, y), icon, font=f["icon"], fill=BLACK, anchor="lm")
+        draw.text((x + icon_w + 8, y), title, font=f["medium"], fill=BLACK, anchor="lm")
+        draw.line([(20, y + 22), (W - 20, y + 22)], fill=BLACK, width=2)
+        return y + 22
+
+    def _render_energy_strip(self, draw, f, y):
+        solar_today  = self._float(self.sensor_solar_today)
+        import_today = self._float(self.sensor_import_daily)
+        export_today = self._float(self.sensor_export_daily)
+        used_today   = max(0.0, import_today - export_today)
+
+        x0, x1, h = 20, 460, 62
+        col_w = (x1 - x0) // 4
+        hdr_h = 22
+        draw.rounded_rectangle([x0, y, x1, y + h], radius=10, fill=WHITE, outline=BLACK, width=2)
+        for i, (lbl, val) in enumerate([
+            ("SOLAR",  f"{solar_today:.1f} kWh"),
+            ("IMPORT", f"{import_today:.1f} kWh"),
+            ("EXPORT", f"{export_today:.1f} kWh"),
+            ("NET",    f"{used_today:.1f} kWh"),
+        ]):
+            cx = x0 + col_w * i + col_w // 2
+            if i > 0:
+                draw.line([(x0 + col_w * i, y + 4), (x0 + col_w * i, y + h - 4)], fill=BLACK, width=1)
+            draw.text((cx, y + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
+            draw.line([(x0 + col_w * i + 4, y + hdr_h), (x0 + col_w * (i + 1) - 4, y + hdr_h)], fill=BLACK, width=1)
+            draw.text((cx, y + hdr_h + (h - hdr_h) // 2), val, font=f["medium"], fill=BLACK, anchor="mm")
+        return y + h + 22
+
+    def _render_statuses(self, draw, f, y, statuses):
+        y = self._render_section_header(draw, f, y, "\U000F02FC", "STATUSES")
+        y += 26
+        for icon, label, value in statuses:
+            y = self._status_row(draw, f, y, icon, label, value)
+        return y
 
     # ── Box ───────────────────────────────────────────────────────────────────
 
@@ -426,10 +420,10 @@ class EinkDashboard(hass.Hass):
             return f"{secs // 86400}d"
 
     def _status_row(self, draw, f, y, icon, label, value, margin=20, gap=6):
-        """Draw a single status row: icon  label: value"""
         iw = draw.textlength(icon, font=f["icon_sm"])
         draw.text((margin, y), icon, font=f["icon_sm"], fill=BLACK, anchor="lm")
         draw.text((margin + iw + gap, y), f"{label}: {value}", font=f["status_text"], fill=BLACK, anchor="lm")
+        return y + 32
 
     def _float(self, entity, default=0.0):
         try:

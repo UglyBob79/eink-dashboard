@@ -16,6 +16,11 @@ SENSOR_BATT_SOC = "sensor.victron_mqtt_system_0_system_dc_battery_soc"
 SENSOR_LOAD          = "sensor.victron_consumption"
 SENSOR_INVERTER_STATE = "sensor.victron_mqtt_vebus_274_vebus_inverter_state"
 
+# Daily energy sensors
+SENSOR_SOLAR_TODAY   = "sensor.victron_mqtt_solarcharger_288_solarcharger_yield_today"
+SENSOR_IMPORT_DAILY  = "sensor.grid_import_daily"
+SENSOR_EXPORT_DAILY  = "sensor.grid_export_daily"
+
 # Status entities
 STATUS_GRID_LOST = "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost"
 STATUS_CAT_BOX        = "binary_sensor.magnet_cat_box_contact"
@@ -155,7 +160,8 @@ class EinkDashboard(hass.Hass):
 
         self._box(draw, f, *GRID_POS, *GRID_BOX,
                   "GRID", f"{int(abs(grid_w))} W",
-                  sub=grid_state)
+                  sub=grid_state,
+                  filled=(grid_state == "IMPORT"))
         if grid_state == "LOST":
             bx = GRID_POS[0] + GRID_BOX[0] // 2 - 5
             by = GRID_POS[1] + GRID_BOX[1] // 2 - 5
@@ -169,11 +175,43 @@ class EinkDashboard(hass.Hass):
         batt_sub = "CHARGING" if charging else ("DISCHARGING" if discharging else "IDLE")
         self._box(draw, f, *BATT_POS, *BATT_BOX,
                   "BATTERY", f"{int(soc)}%",
-                  sub=f"{int(abs(battery_w))} W  ·  {batt_sub}")
+                  sub=f"{int(abs(battery_w))} W  ·  {batt_sub}",
+                  filled=discharging)
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
+        # ── Energy today strip (below battery, above statuses) ───────────
+        solar_today  = self._float(SENSOR_SOLAR_TODAY)
+        import_today = self._float(SENSOR_IMPORT_DAILY)
+        export_today = self._float(SENSOR_EXPORT_DAILY)
+        used_today   = max(0.0, import_today - export_today)
+
+        strip_x0, strip_y0 = 20, 438
+        strip_x1, strip_y1 = 460, 500
+        col_w = (strip_x1 - strip_x0) // 4
+        draw.rounded_rectangle([strip_x0, strip_y0, strip_x1, strip_y1],
+                                radius=10, fill=WHITE, outline=BLACK, width=2)
+
+        energy_cols = [
+            ("SOLAR",  f"{solar_today:.1f} kWh"),
+            ("IMPORT", f"{import_today:.1f} kWh"),
+            ("EXPORT", f"{export_today:.1f} kWh"),
+            ("NET",    f"{used_today:.1f} kWh"),
+        ]
+        hdr_h = 22   # height of the label row
+        for i, (lbl, val) in enumerate(energy_cols):
+            cx = strip_x0 + col_w * i + col_w // 2
+            if i > 0:
+                div_x = strip_x0 + col_w * i
+                draw.line([(div_x, strip_y0 + 4), (div_x, strip_y1 - 4)], fill=BLACK, width=1)
+            draw.text((cx, strip_y0 + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
+            draw.line([(strip_x0 + col_w * i + 4,     strip_y0 + hdr_h),
+                        (strip_x0 + col_w * (i + 1) - 4, strip_y0 + hdr_h)],
+                       fill=BLACK, width=1)
+            val_cy = strip_y0 + hdr_h + (strip_y1 - strip_y0 - hdr_h) // 2
+            draw.text((cx, val_cy), val, font=f["medium"], fill=BLACK, anchor="mm")
+
         # ── Statuses header ───────────────────────────────────────────────
-        sy = BATT_POS[1] + BATT_BOX[1] // 2 + 30
+        sy = strip_y1 + 22
         _iw = draw.textlength("\U000F02FC", font=f["icon"])
         _tw = draw.textlength("STATUSES", font=f["medium"])
         _sx = (W - (_iw + 8 + _tw)) // 2

@@ -35,6 +35,63 @@ HOME_POS   = _pos(405, 215);  HOME_BOX   = (110, 100)
 BATT_POS   = _pos(240, 355);  BATT_BOX   = (160,  90)
 
 
+# ── Component system ──────────────────────────────────────────────────────────
+
+COMPONENT_REGISTRY = {}
+
+def _register(name):
+    def decorator(cls):
+        COMPONENT_REGISTRY[name] = cls
+        return cls
+    return decorator
+
+
+class Component:
+    def entities(self):
+        return []
+
+    def render(self, draw, fonts, y):
+        raise NotImplementedError
+
+
+@_register("status_list")
+class StatusList(Component):
+    def __init__(self, config, hass):
+        self._hass  = hass
+        self._title = config.get("title", "STATUSES")
+        self._icon  = config.get("icon", "\U000F02FC")
+        self._items = config.get("items", [])
+
+    def entities(self):
+        return [item["entity"] for item in self._items]
+
+    def render(self, draw, fonts, y):
+        hass = self._hass
+        y = hass._render_section_header(draw, fonts, y, self._icon, self._title)
+        y += 26
+        for item in self._items:
+            value = self._resolve_value(item["entity"], item.get("value", "state"))
+            y = hass._status_row(draw, fonts, y, item["icon"], item["label"], value)
+        return y
+
+    def _resolve_value(self, entity, value_type):
+        hass = self._hass
+        if value_type == "elapsed":
+            return hass._elapsed(entity)
+        elif value_type == "on_off_elapsed":
+            on      = hass.get_state(entity) == "on"
+            elapsed = hass._elapsed(entity)
+            return f"on · {elapsed}" if on else f"off · {elapsed}"
+        elif value_type == "alarm_elapsed":
+            alarm   = hass.get_state(entity) == "Alarm"
+            elapsed = hass._elapsed(entity)
+            return f"for {elapsed}" if alarm else f"OK · {elapsed}"
+        else:
+            return hass.get_state(entity) or "—"
+
+
+# ── AppDaemon app ─────────────────────────────────────────────────────────────
+
 class EinkDashboard(hass.Hass):
 
     def initialize(self):
@@ -49,8 +106,7 @@ class EinkDashboard(hass.Hass):
 
         required = [
             "sensor_solar", "sensor_grid", "sensor_battery", "sensor_batt_soc",
-            "sensor_load", "sensor_inverter_state",
-            "status_grid_lost", "status_cat_box", "status_cat_box_dt", "status_pool_pump",
+            "sensor_load", "sensor_inverter_state", "sensor_grid_lost",
         ]
         if self.show_energy_today:
             required += ["sensor_solar_today", "sensor_import_daily", "sensor_export_daily"]
@@ -67,13 +123,19 @@ class EinkDashboard(hass.Hass):
         self.sensor_batt_soc       = self.args["sensor_batt_soc"]
         self.sensor_load           = self.args["sensor_load"]
         self.sensor_inverter_state = self.args["sensor_inverter_state"]
+        self.sensor_grid_lost      = self.args["sensor_grid_lost"]
         self.sensor_solar_today    = self.args.get("sensor_solar_today")
         self.sensor_import_daily   = self.args.get("sensor_import_daily")
         self.sensor_export_daily   = self.args.get("sensor_export_daily")
-        self.status_grid_lost      = self.args["status_grid_lost"]
-        self.status_cat_box        = self.args["status_cat_box"]
-        self.status_cat_box_dt     = self.args["status_cat_box_dt"]
-        self.status_pool_pump      = self.args["status_pool_pump"]
+
+        self.components = []
+        for comp_cfg in self.args.get("components", []):
+            comp_type = comp_cfg.get("type")
+            cls = COMPONENT_REGISTRY.get(comp_type)
+            if cls is None:
+                self.log(f"Unknown component type: {comp_type!r}", level="WARNING")
+                continue
+            self.components.append(cls(comp_cfg, self))
 
         self.run_every(self._scheduled_render, "now", interval)
 
@@ -96,11 +158,12 @@ class EinkDashboard(hass.Hass):
         entities = [
             self.sensor_solar, self.sensor_grid, self.sensor_battery,
             self.sensor_batt_soc, self.sensor_load, self.sensor_inverter_state,
-            self.status_grid_lost, self.status_cat_box, self.status_cat_box_dt,
-            self.status_pool_pump,
+            self.sensor_grid_lost,
         ]
         if self.show_energy_today:
             entities += [self.sensor_solar_today, self.sensor_import_daily, self.sensor_export_daily]
+        for comp in self.components:
+            entities += comp.entities()
         bad = []
         for e in entities:
             state = self.get_state(e)
@@ -153,7 +216,7 @@ class EinkDashboard(hass.Hass):
         charging    = battery_w < -50   # system → battery
         discharging = battery_w >  50   # battery → system
 
-        if self.get_state(self.status_grid_lost) == "Alarm":
+        if self.get_state(self.sensor_grid_lost) == "Alarm":
             grid_state = "LOST"
         elif grid_w > 50:
             grid_state = "IMPORT"
@@ -232,21 +295,13 @@ class EinkDashboard(hass.Hass):
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
         # ── Sections below the diagram ────────────────────────────────────
-        grid_val = f"for {self._elapsed(self.status_grid_lost)}" if grid_state == "LOST" else f"OK · {self._elapsed(self.status_grid_lost)}"
-        pump_on  = self.get_state(self.status_pool_pump) == "on"
-        pump_val = f"for {self._elapsed(self.status_pool_pump)}" if pump_on else f"off · {self._elapsed(self.status_pool_pump)}"
-        statuses = [
-            ("\U000F0D3E", "Grid lost",        grid_val),
-            ("\U000F011B", "Cat box emptied",  self._elapsed(self.status_cat_box_dt)),
-            ("\U000F0606", "Pool pump",         pump_val),
-        ]
-
         batt_bottom = BATT_POS[1] + BATT_BOX[1] // 2
         if self.show_energy_today:
             y = self._render_energy_strip(draw, f, batt_bottom + 8)
         else:
             y = batt_bottom + 30
-        y = self._render_statuses(draw, f, y, statuses)
+        for comp in self.components:
+            y = comp.render(draw, f, y)
 
         # ── Timestamp ─────────────────────────────────────────────────────
         from datetime import datetime
@@ -305,13 +360,6 @@ class EinkDashboard(hass.Hass):
             draw.line([(x0 + col_w * i + 4, y + hdr_h), (x0 + col_w * (i + 1) - 4, y + hdr_h)], fill=BLACK, width=1)
             draw.text((cx, y + hdr_h + (h - hdr_h) // 2), val, font=f["medium"], fill=BLACK, anchor="mm")
         return y + h + 22
-
-    def _render_statuses(self, draw, f, y, statuses):
-        y = self._render_section_header(draw, f, y, "\U000F02FC", "STATUSES")
-        y += 26
-        for icon, label, value in statuses:
-            y = self._status_row(draw, f, y, icon, label, value)
-        return y
 
     # ── Box ───────────────────────────────────────────────────────────────────
 

@@ -43,24 +43,29 @@ class EinkDashboard(hass.Hass):
         self.system_label = self.args.get("system_label", "SYSTEM")
         interval          = self.args.get("render_interval", 60)
 
-        # Power sensors
-        self.sensor_solar    = self.args.get("sensor_solar",    "sensor.victron_mqtt_system_0_system_dc_pv_power")
-        self.sensor_grid     = self.args.get("sensor_grid",     "sensor.victron_grid_power")
-        self.sensor_battery  = self.args.get("sensor_battery",  "sensor.victron_mqtt_system_0_system_dc_battery_power")
-        self.sensor_batt_soc = self.args.get("sensor_batt_soc", "sensor.victron_mqtt_system_0_system_dc_battery_soc")
-        self.sensor_load     = self.args.get("sensor_load",     "sensor.victron_consumption")
-        self.sensor_inverter_state = self.args.get("sensor_inverter_state", "sensor.victron_mqtt_vebus_274_vebus_inverter_state")
+        required = [
+            "sensor_solar", "sensor_grid", "sensor_battery", "sensor_batt_soc",
+            "sensor_load", "sensor_inverter_state",
+            "sensor_solar_today", "sensor_import_daily", "sensor_export_daily",
+            "status_grid_lost", "status_cat_box", "status_cat_box_dt", "status_pool_pump",
+        ]
+        missing = [k for k in required if k not in self.args]
+        if missing:
+            raise ValueError(f"EinkDashboard: missing required config keys: {missing}")
 
-        # Daily energy sensors
-        self.sensor_solar_today  = self.args.get("sensor_solar_today",  "sensor.victron_mqtt_solarcharger_288_solarcharger_yield_today")
-        self.sensor_import_daily = self.args.get("sensor_import_daily", "sensor.grid_import_daily")
-        self.sensor_export_daily = self.args.get("sensor_export_daily", "sensor.grid_export_daily")
-
-        # Status entities
-        self.status_grid_lost = self.args.get("status_grid_lost", "sensor.victron_mqtt_vebus_274_vebus_inverter_alarm_grid_lost")
-        self.status_cat_box   = self.args.get("status_cat_box",   "binary_sensor.magnet_cat_box_contact")
-        self.status_cat_box_dt = self.args.get("status_cat_box_dt", "input_datetime.cat_box_last_emptied")
-        self.status_pool_pump = self.args.get("status_pool_pump", "switch.poolpump1_relay")
+        self.sensor_solar          = self.args["sensor_solar"]
+        self.sensor_grid           = self.args["sensor_grid"]
+        self.sensor_battery        = self.args["sensor_battery"]
+        self.sensor_batt_soc       = self.args["sensor_batt_soc"]
+        self.sensor_load           = self.args["sensor_load"]
+        self.sensor_inverter_state = self.args["sensor_inverter_state"]
+        self.sensor_solar_today    = self.args["sensor_solar_today"]
+        self.sensor_import_daily   = self.args["sensor_import_daily"]
+        self.sensor_export_daily   = self.args["sensor_export_daily"]
+        self.status_grid_lost      = self.args["status_grid_lost"]
+        self.status_cat_box        = self.args["status_cat_box"]
+        self.status_cat_box_dt     = self.args["status_cat_box_dt"]
+        self.status_pool_pump      = self.args["status_pool_pump"]
 
         os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
@@ -71,9 +76,55 @@ class EinkDashboard(hass.Hass):
 
     def generate(self):
         try:
-            self._render_power_page()
+            unavailable = self._check_entities()
+            if unavailable:
+                self._render_error_page(unavailable)
+            else:
+                self._render_power_page()
         except Exception as e:
             self.log(f"EinkDashboard render error: {e}", level="ERROR")
+
+    def _check_entities(self):
+        """Return list of entity IDs that are missing or unavailable."""
+        entities = [
+            self.sensor_solar, self.sensor_grid, self.sensor_battery,
+            self.sensor_batt_soc, self.sensor_load, self.sensor_inverter_state,
+            self.sensor_solar_today, self.sensor_import_daily, self.sensor_export_daily,
+            self.status_grid_lost, self.status_cat_box, self.status_cat_box_dt,
+            self.status_pool_pump,
+        ]
+        bad = []
+        for e in entities:
+            state = self.get_state(e)
+            if state is None or state in ("unavailable", "unknown"):
+                bad.append(e)
+        return bad
+
+    def _render_error_page(self, unavailable):
+        img  = Image.new("RGB", (W, H), WHITE)
+        draw = ImageDraw.Draw(img)
+        f    = self.fonts
+
+        draw.text((W // 2, 60), "\U000F0028", font=f["icon"], fill=BLACK, anchor="mm")
+        draw.text((W // 2, 100), "UNAVAILABLE ENTITIES", font=f["medium"], fill=BLACK, anchor="mm")
+        draw.line([(20, 120), (W - 20, 120)], fill=BLACK, width=2)
+
+        y = 148
+        for entity in unavailable:
+            draw.text((W // 2, y), entity, font=f["small"], fill=BLACK, anchor="mm")
+            y += 22
+
+        from datetime import datetime
+        ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
+        draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
+
+        img.save(f"{self.out_dir}/eink_page0.png")
+        img_l = img.convert("L")
+        img_land_l = img_l.transpose(Image.ROTATE_270)
+        img_land_1bit = img_land_l.point(lambda x: 255 if x > 128 else 0, "1")
+        with open(f"{self.out_dir}/eink_page0.bin", "wb") as fh:
+            fh.write(img_land_1bit.tobytes())
+        self.log(f"Rendered error page: {unavailable}", level="WARNING")
 
     # ── Rendering ─────────────────────────────────────────────────────────────
 

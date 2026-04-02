@@ -42,6 +42,8 @@ class EinkDashboard(hass.Hass):
         self.fonts_dir    = self.args.get("fonts_dir",  "/homeassistant/esphome/apps/dashboard/fonts")
         self.system_label = self.args.get("system_label", "SYSTEM")
         interval          = self.args.get("render_interval", 60)
+        os.makedirs(self.out_dir, exist_ok=True)
+        self.fonts = self._load_fonts()
 
         required = [
             "sensor_solar", "sensor_grid", "sensor_battery", "sensor_batt_soc",
@@ -51,7 +53,9 @@ class EinkDashboard(hass.Hass):
         ]
         missing = [k for k in required if k not in self.args]
         if missing:
-            raise ValueError(f"EinkDashboard: missing required config keys: {missing}")
+            self.log(f"Missing required config keys: {missing}", level="ERROR")
+            self._render_error_page("MISSING CONFIG KEYS", missing)
+            return
 
         self.sensor_solar          = self.args["sensor_solar"]
         self.sensor_grid           = self.args["sensor_grid"]
@@ -67,8 +71,6 @@ class EinkDashboard(hass.Hass):
         self.status_cat_box_dt     = self.args["status_cat_box_dt"]
         self.status_pool_pump      = self.args["status_pool_pump"]
 
-        os.makedirs(self.out_dir, exist_ok=True)
-        self.fonts = self._load_fonts()
         self.run_every(self._scheduled_render, "now", interval)
 
     def _scheduled_render(self, kwargs):
@@ -78,7 +80,8 @@ class EinkDashboard(hass.Hass):
         try:
             unavailable = self._check_entities()
             if unavailable:
-                self._render_error_page(unavailable)
+                self.log(f"Unavailable entities: {unavailable}", level="WARNING")
+                self._render_error_page("UNAVAILABLE ENTITIES", unavailable)
             else:
                 self._render_power_page()
         except Exception as e:
@@ -100,18 +103,18 @@ class EinkDashboard(hass.Hass):
                 bad.append(e)
         return bad
 
-    def _render_error_page(self, unavailable):
+    def _render_error_page(self, title, lines):
         img  = Image.new("RGB", (W, H), WHITE)
         draw = ImageDraw.Draw(img)
         f    = self.fonts
 
         draw.text((W // 2, 60), "\U000F0028", font=f["icon"], fill=BLACK, anchor="mm")
-        draw.text((W // 2, 100), "UNAVAILABLE ENTITIES", font=f["medium"], fill=BLACK, anchor="mm")
+        draw.text((W // 2, 100), title, font=f["medium"], fill=BLACK, anchor="mm")
         draw.line([(20, 120), (W - 20, 120)], fill=BLACK, width=2)
 
         y = 148
-        for entity in unavailable:
-            draw.text((W // 2, y), entity, font=f["small"], fill=BLACK, anchor="mm")
+        for line in lines:
+            draw.text((W // 2, y), line, font=f["small"], fill=BLACK, anchor="mm")
             y += 22
 
         from datetime import datetime
@@ -124,7 +127,6 @@ class EinkDashboard(hass.Hass):
         img_land_1bit = img_land_l.point(lambda x: 255 if x > 128 else 0, "1")
         with open(f"{self.out_dir}/eink_page0.bin", "wb") as fh:
             fh.write(img_land_1bit.tobytes())
-        self.log(f"Rendered error page: {unavailable}", level="WARNING")
 
     # ── Rendering ─────────────────────────────────────────────────────────────
 

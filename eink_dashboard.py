@@ -90,6 +90,44 @@ class StatusList(Component):
             return hass.get_state(entity) or "—"
 
 
+@_register("energy_strip")
+class EnergyStrip(Component):
+    def __init__(self, config, hass):
+        self._hass   = hass
+        sensors      = config.get("sensors", {})
+        self._solar  = sensors["solar_today"]
+        self._import = sensors["import_daily"]
+        self._export = sensors["export_daily"]
+
+    def entities(self):
+        return [self._solar, self._import, self._export]
+
+    def render(self, draw, fonts, y):
+        hass         = self._hass
+        solar_today  = hass._float(self._solar)
+        import_today = hass._float(self._import)
+        export_today = hass._float(self._export)
+        used_today   = max(0.0, import_today - export_today)
+
+        x0, x1, h = 20, 460, 62
+        col_w = (x1 - x0) // 4
+        hdr_h = 22
+        draw.rounded_rectangle([x0, y, x1, y + h], radius=10, fill=WHITE, outline=BLACK, width=2)
+        for i, (lbl, val) in enumerate([
+            ("SOLAR",  f"{solar_today:.1f} kWh"),
+            ("IMPORT", f"{import_today:.1f} kWh"),
+            ("EXPORT", f"{export_today:.1f} kWh"),
+            ("NET",    f"{used_today:.1f} kWh"),
+        ]):
+            cx = x0 + col_w * i + col_w // 2
+            if i > 0:
+                draw.line([(x0 + col_w * i, y + 4), (x0 + col_w * i, y + h - 4)], fill=BLACK, width=1)
+            draw.text((cx, y + hdr_h // 2), lbl, font=fonts["label"], fill=BLACK, anchor="mm")
+            draw.line([(x0 + col_w * i + 4, y + hdr_h), (x0 + col_w * (i + 1) - 4, y + hdr_h)], fill=BLACK, width=1)
+            draw.text((cx, y + hdr_h + (h - hdr_h) // 2), val, font=fonts["medium"], fill=BLACK, anchor="mm")
+        return y + h + 22
+
+
 # ── AppDaemon app ─────────────────────────────────────────────────────────────
 
 class EinkDashboard(hass.Hass):
@@ -102,14 +140,10 @@ class EinkDashboard(hass.Hass):
         os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
 
-        self.show_energy_today = self.args.get("show_energy_today", False)
-
         required = [
             "sensor_solar", "sensor_grid", "sensor_battery", "sensor_batt_soc",
             "sensor_load", "sensor_inverter_state", "sensor_grid_lost",
         ]
-        if self.show_energy_today:
-            required += ["sensor_solar_today", "sensor_import_daily", "sensor_export_daily"]
 
         missing = [k for k in required if k not in self.args]
         if missing:
@@ -124,9 +158,6 @@ class EinkDashboard(hass.Hass):
         self.sensor_load           = self.args["sensor_load"]
         self.sensor_inverter_state = self.args["sensor_inverter_state"]
         self.sensor_grid_lost      = self.args["sensor_grid_lost"]
-        self.sensor_solar_today    = self.args.get("sensor_solar_today")
-        self.sensor_import_daily   = self.args.get("sensor_import_daily")
-        self.sensor_export_daily   = self.args.get("sensor_export_daily")
 
         self.components = []
         for comp_cfg in self.args.get("components", []):
@@ -160,8 +191,6 @@ class EinkDashboard(hass.Hass):
             self.sensor_batt_soc, self.sensor_load, self.sensor_inverter_state,
             self.sensor_grid_lost,
         ]
-        if self.show_energy_today:
-            entities += [self.sensor_solar_today, self.sensor_import_daily, self.sensor_export_daily]
         for comp in self.components:
             entities += comp.entities()
         bad = []
@@ -295,11 +324,7 @@ class EinkDashboard(hass.Hass):
         self._battery_poles(draw, f, *BATT_POS, *BATT_BOX)
 
         # ── Sections below the diagram ────────────────────────────────────
-        batt_bottom = BATT_POS[1] + BATT_BOX[1] // 2
-        if self.show_energy_today:
-            y = self._render_energy_strip(draw, f, batt_bottom + 8)
-        else:
-            y = batt_bottom + 30
+        y = BATT_POS[1] + BATT_BOX[1] // 2 + 8
         for comp in self.components:
             y = comp.render(draw, f, y)
 
@@ -336,30 +361,6 @@ class EinkDashboard(hass.Hass):
         draw.text((x + icon_w + 8, y), title, font=f["medium"], fill=BLACK, anchor="lm")
         draw.line([(20, y + 22), (W - 20, y + 22)], fill=BLACK, width=2)
         return y + 22
-
-    def _render_energy_strip(self, draw, f, y):
-        solar_today  = self._float(self.sensor_solar_today)
-        import_today = self._float(self.sensor_import_daily)
-        export_today = self._float(self.sensor_export_daily)
-        used_today   = max(0.0, import_today - export_today)
-
-        x0, x1, h = 20, 460, 62
-        col_w = (x1 - x0) // 4
-        hdr_h = 22
-        draw.rounded_rectangle([x0, y, x1, y + h], radius=10, fill=WHITE, outline=BLACK, width=2)
-        for i, (lbl, val) in enumerate([
-            ("SOLAR",  f"{solar_today:.1f} kWh"),
-            ("IMPORT", f"{import_today:.1f} kWh"),
-            ("EXPORT", f"{export_today:.1f} kWh"),
-            ("NET",    f"{used_today:.1f} kWh"),
-        ]):
-            cx = x0 + col_w * i + col_w // 2
-            if i > 0:
-                draw.line([(x0 + col_w * i, y + 4), (x0 + col_w * i, y + h - 4)], fill=BLACK, width=1)
-            draw.text((cx, y + hdr_h // 2), lbl, font=f["label"], fill=BLACK, anchor="mm")
-            draw.line([(x0 + col_w * i + 4, y + hdr_h), (x0 + col_w * (i + 1) - 4, y + hdr_h)], fill=BLACK, width=1)
-            draw.text((cx, y + hdr_h + (h - hdr_h) // 2), val, font=f["medium"], fill=BLACK, anchor="mm")
-        return y + h + 22
 
     # ── Box ───────────────────────────────────────────────────────────────────
 

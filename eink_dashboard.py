@@ -346,14 +346,17 @@ class EinkDashboard(hass.Hass):
 
         self.show_timestamp = self.args.get("show_timestamp", True)
 
-        self.components = []
-        for comp_cfg in self.args.get("components", []):
-            comp_type = comp_cfg.get("type")
-            cls = COMPONENT_REGISTRY.get(comp_type)
-            if cls is None:
-                self.log(f"Unknown component type: {comp_type!r}", level="WARNING")
-                continue
-            self.components.append(cls(comp_cfg, self))
+        self.pages = []
+        for page_cfg in self.args.get("pages", []):
+            components = []
+            for comp_cfg in page_cfg.get("components", []):
+                comp_type = comp_cfg.get("type")
+                cls = COMPONENT_REGISTRY.get(comp_type)
+                if cls is None:
+                    self.log(f"Unknown component type: {comp_type!r}", level="WARNING")
+                    continue
+                components.append(cls(comp_cfg, self))
+            self.pages.append(components)
 
         self.run_every(self._scheduled_render, "now", interval)
 
@@ -367,15 +370,17 @@ class EinkDashboard(hass.Hass):
                 self.log(f"Unavailable entities: {unavailable}", level="WARNING")
                 self._render_error_page("UNAVAILABLE ENTITIES", unavailable)
             else:
-                self._render_power_page()
+                for idx, components in enumerate(self.pages):
+                    self._render_page(idx, components)
         except Exception as e:
             self.log(f"EinkDashboard render error: {e}", level="ERROR")
 
     def _check_entities(self):
         """Return list of entity IDs that are missing or unavailable."""
         entities = []
-        for comp in self.components:
-            entities += comp.entities()
+        for components in self.pages:
+            for comp in components:
+                entities += comp.entities()
         bad = []
         for e in entities:
             state = self.get_state(e)
@@ -410,13 +415,13 @@ class EinkDashboard(hass.Hass):
 
     # ── Rendering ─────────────────────────────────────────────────────────────
 
-    def _render_power_page(self):
+    def _render_page(self, idx, components):
         img  = Image.new("RGB", (W, H), WHITE)
         draw = ImageDraw.Draw(img)
         f    = self.fonts
 
         y = 0
-        for comp in self.components:
+        for comp in components:
             y = comp.render(draw, f, y)
 
         if self.show_timestamp:
@@ -424,13 +429,13 @@ class EinkDashboard(hass.Hass):
             ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
             draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
-        img.save(f"{self.out_dir}/eink_page0.png")
+        img.save(f"{self.out_dir}/eink_page{idx}.png")
         img_l = img.convert("L")
         img_land_l = img_l.transpose(Image.ROTATE_270)
         img_land_1bit = img_land_l.point(lambda x: 255 if x > 128 else 0, "1")
-        with open(f"{self.out_dir}/eink_page0.bin", "wb") as fh:
+        with open(f"{self.out_dir}/eink_page{idx}.bin", "wb") as fh:
             fh.write(img_land_1bit.tobytes())
-        self.log("Rendered eink_page0.png + eink_page0.bin")
+        self.log(f"Rendered eink_page{idx}.png + eink_page{idx}.bin")
 
     # ── Shared rendering helpers (called by components via hass) ──────────────
 

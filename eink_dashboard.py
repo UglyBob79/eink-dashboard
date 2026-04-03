@@ -248,7 +248,7 @@ class SectionHeader(Component):
         self._icon  = config.get("icon")
 
     def render(self, draw, fonts, y):
-        return self._hass._render_section_header(draw, fonts, y, self._icon, self._title)
+        return self._hass._render_section_header(draw, fonts, y + 22, self._icon, self._title)
 
 
 @_register("divider")

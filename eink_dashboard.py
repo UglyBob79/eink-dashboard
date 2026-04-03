@@ -346,6 +346,11 @@ class EinkDashboard(hass.Hass):
 
         self.show_timestamp = self.args.get("show_timestamp", True)
 
+        bin_cfg           = self.args.get("bin", {})
+        self.bin_enabled  = bin_cfg.get("enabled",  False)
+        self.bin_rotation = bin_cfg.get("rotation", 270)   # degrees CW
+        self.bin_invert   = bin_cfg.get("invert",   False)
+
         self.pages = []
         for page_cfg in self.args.get("pages", []):
             components = []
@@ -430,12 +435,23 @@ class EinkDashboard(hass.Hass):
             draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
         img.save(f"{self.out_dir}/eink_page{idx}.png")
-        img_l = img.convert("L")
-        img_land_l = img_l.transpose(Image.ROTATE_270)
-        img_land_1bit = img_land_l.point(lambda x: 255 if x > 128 else 0, "1")
-        with open(f"{self.out_dir}/eink_page{idx}.bin", "wb") as fh:
-            fh.write(img_land_1bit.tobytes())
-        self.log(f"Rendered eink_page{idx}.png + eink_page{idx}.bin")
+
+        if self.bin_enabled:
+            _rotations = {
+                90:  Image.ROTATE_270,
+                180: Image.ROTATE_180,
+                270: Image.ROTATE_90,
+            }
+            img_l = img.convert("L")
+            if self.bin_rotation in _rotations:
+                img_l = img_l.transpose(_rotations[self.bin_rotation])
+            hi, lo = (0, 255) if self.bin_invert else (255, 0)
+            img_1bit = img_l.point(lambda x: hi if x > 128 else lo, "1")
+            with open(f"{self.out_dir}/eink_page{idx}.bin", "wb") as fh:
+                fh.write(img_1bit.tobytes())
+            self.log(f"Rendered eink_page{idx}.png + eink_page{idx}.bin")
+        else:
+            self.log(f"Rendered eink_page{idx}.png")
 
     # ── Shared rendering helpers (called by components via hass) ──────────────
 

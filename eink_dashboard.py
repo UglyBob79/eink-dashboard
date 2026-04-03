@@ -438,9 +438,9 @@ class EinkDashboard(hass.Hass):
 
         if self.bin_enabled:
             _rotations = {
-                90:  Image.ROTATE_270,
+                90:  Image.ROTATE_90,
                 180: Image.ROTATE_180,
-                270: Image.ROTATE_90,
+                270: Image.ROTATE_270,
             }
             img_l = img.convert("L")
             if self.bin_rotation in _rotations:

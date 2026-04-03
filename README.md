@@ -34,7 +34,7 @@ eink_dashboard:
 
   bin:
     enabled:  true   # generate BIN file alongside PNG, default false
-    rotation: 270    # degrees clockwise applied to the image before writing, default 270
+    rotation: 270    # degrees counter-clockwise applied to the image before writing, default 270
     invert:   false  # invert black/white, default false
 
   pages:
@@ -194,4 +194,4 @@ Each page writes two files to `out_dir`:
 | `eink_pageN.png` | Portrait RGB PNG for debugging |
 | `eink_pageN.bin` | Landscape 1-bit buffer, ready for ESP direct write |
 
-The BIN is thresholded at 128. Rotation and inversion are configurable via the `bin:` section. The Waveshare V2 default is `rotation: 270` (90° CW, portrait→landscape) and `invert: false` — the UC8179 driver inverts the buffer itself.
+The BIN is thresholded at 128. Rotation and inversion are configurable via the `bin:` section. The Waveshare V2 default is `rotation: 270` (270° CCW = 90° CW, portrait→landscape) and `invert: false` — the UC8179 driver inverts the buffer itself.

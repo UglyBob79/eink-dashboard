@@ -344,6 +344,8 @@ class EinkDashboard(hass.Hass):
         os.makedirs(self.out_dir, exist_ok=True)
         self.fonts = self._load_fonts()
 
+        self.show_timestamp = self.args.get("show_timestamp", True)
+
         self.components = []
         for comp_cfg in self.args.get("components", []):
             comp_type = comp_cfg.get("type")
@@ -417,9 +419,10 @@ class EinkDashboard(hass.Hass):
         for comp in self.components:
             y = comp.render(draw, f, y)
 
-        from datetime import datetime
-        ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
-        draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
+        if self.show_timestamp:
+            from datetime import datetime
+            ts = datetime.now().strftime("Updated %Y-%m-%d %H:%M")
+            draw.text((W // 2, H - 8), ts, font=f["label"], fill=BLACK, anchor="mb")
 
         img.save(f"{self.out_dir}/eink_page0.png")
         img_l = img.convert("L")

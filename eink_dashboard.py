@@ -37,6 +37,12 @@ BATT_POS   = _pos(240, 355);  BATT_BOX   = (160,  90)
 
 COMPONENT_REGISTRY = {}
 
+
+def _mdi(code):
+    """Convert MDI hex code string like 'F0606' to the Unicode character."""
+    return chr(int(code, 16))
+
+
 def _register(name):
     def decorator(cls):
         COMPONENT_REGISTRY[name] = cls
@@ -245,7 +251,7 @@ class SectionHeader(Component):
     def __init__(self, config, hass):
         self._hass  = hass
         self._title = config["title"]
-        self._icon  = config.get("icon")
+        self._icon  = _mdi(config["icon"]) if "icon" in config else None
 
     def render(self, draw, fonts, y):
         return self._hass._render_section_header(draw, fonts, y, self._icon, self._title)
@@ -266,7 +272,9 @@ class Divider(Component):
 class StatusList(Component):
     def __init__(self, config, hass):
         self._hass  = hass
-        self._items = config.get("items", [])
+        self._items = [
+            {**item, "icon": _mdi(item["icon"])} for item in config.get("items", [])
+        ]
 
     def entities(self):
         return [item["entity"] for item in self._items]

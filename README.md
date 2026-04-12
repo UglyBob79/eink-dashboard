@@ -58,19 +58,19 @@ eink_dashboard:
 
         - type: section_header
           title: STATUSES
-          icon: "\U000F02FC"
+          icon: F02FC
 
         - type: status_list
           items:
-            - icon: "\U000F0350"
+            - icon: F0D3E
               label: Grid lost
               entity: sensor.grid_lost_alarm
               value: alarm_elapsed
-            - icon: "\U000F044F"
+            - icon: F011B
               label: Cat box emptied
               entity: input_datetime.cat_box_last_emptied
               value: elapsed
-            - icon: "\U000F0182"
+            - icon: F0606
               label: Pool pump
               entity: switch.pool_pump
               value: on_off_elapsed
@@ -128,7 +128,7 @@ Renders a centred title with an optional MDI icon and a full-width underline.
 ```yaml
 - type: section_header
   title: STATUSES
-  icon: "\U000F02FC"    # optional
+  icon: F02FC    # optional, MDI hex code from materialdesignicons.com
 ```
 
 ### `status_list`
@@ -138,11 +138,11 @@ Renders a vertical list of icon + label + value rows. Typically placed after a `
 ```yaml
 - type: status_list
   items:
-    - icon: "\U000F0350"
+    - icon: F0350
       label: My entity
       entity: sensor.something
       value: elapsed          # see value types below
-    - icon: "\U000F0004"
+    - icon: F0004
       label: auto             # fetches first name from entity's friendly_name
       entity: person.someone
       value: person_presence
@@ -158,7 +158,7 @@ Renders a vertical list of icon + label + value rows. Typically placed after a `
 | `person_presence` | `Home`, `Away`, or zone name for `person.*` entities |
 | `state` | Raw HA state (default) |
 
-**Note:** MDI icon codepoints must use 8-digit Unicode escapes (`\U000FXXXX`), not 4-digit (`\uXXXX`), since MDI uses Plane 15 codepoints.
+**Icons** are specified as plain MDI hex codes (e.g. `F0606`) — the app converts them automatically. Find codes on [materialdesignicons.com](https://materialdesignicons.com).
 
 ### `divider`
 

@@ -275,8 +275,12 @@ class StatusList(Component):
         hass = self._hass
         y += 26
         for item in self._items:
+            label = item.get("label", "")
+            if label == "auto":
+                friendly = hass.get_state(item["entity"], attribute="friendly_name") or item["entity"]
+                label = friendly.split()[0]
             value = self._resolve_value(item["entity"], item.get("value", "state"))
-            y = hass._status_row(draw, fonts, y, item["icon"], item["label"], value)
+            y = hass._status_row(draw, fonts, y, item["icon"], label, value)
         return y
 
     def _resolve_value(self, entity, value_type):
@@ -291,6 +295,14 @@ class StatusList(Component):
             alarm   = hass.get_state(entity) == "Alarm"
             elapsed = hass._elapsed(entity)
             return f"for {elapsed}" if alarm else f"OK · {elapsed}"
+        elif value_type == "person_presence":
+            state = hass.get_state(entity) or "unknown"
+            if state == "home":
+                return "Home"
+            elif state == "not_home":
+                return "Away"
+            else:
+                return state.replace("_", " ").title()
         else:
             return hass.get_state(entity) or "—"
 

@@ -306,11 +306,12 @@ class StatusList(Component):
         elif value_type == "person_presence":
             state = hass.get_state(entity) or "unknown"
             if state == "home":
-                return "Home"
+                label = "Home"
             elif state == "not_home":
-                return "Away"
+                label = "Away"
             else:
-                return state.replace("_", " ").title()
+                label = state.replace("_", " ").title()
+            return f"{label} · {hass._elapsed(entity)}"
         else:
             return hass.get_state(entity) or "—"
 

@@ -58,19 +58,19 @@ eink_dashboard:
 
         - type: section_header
           title: STATUSES
-          icon: "\uF02FC"
+          icon: "\U000F02FC"
 
         - type: status_list
           items:
-            - icon: "\uF0350"
+            - icon: "\U000F0350"
               label: Grid lost
               entity: sensor.grid_lost_alarm
               value: alarm_elapsed
-            - icon: "\uF044F"
+            - icon: "\U000F044F"
               label: Cat box emptied
               entity: input_datetime.cat_box_last_emptied
               value: elapsed
-            - icon: "\uF0182"
+            - icon: "\U000F0182"
               label: Pool pump
               entity: switch.pool_pump
               value: on_off_elapsed
@@ -128,7 +128,7 @@ Renders a centred title with an optional MDI icon and a full-width underline.
 ```yaml
 - type: section_header
   title: STATUSES
-  icon: "\uF02FC"    # optional
+  icon: "\U000F02FC"    # optional
 ```
 
 ### `status_list`
@@ -138,10 +138,14 @@ Renders a vertical list of icon + label + value rows. Typically placed after a `
 ```yaml
 - type: status_list
   items:
-    - icon: "\uF0350"
+    - icon: "\U000F0350"
       label: My entity
       entity: sensor.something
       value: elapsed          # see value types below
+    - icon: "\U000F0004"
+      label: auto             # fetches first name from entity's friendly_name
+      entity: person.someone
+      value: person_presence
 ```
 
 **Value types:**
@@ -151,7 +155,10 @@ Renders a vertical list of icon + label + value rows. Typically placed after a `
 | `elapsed` | Time since last state change: `5m`, `2h`, `3d` |
 | `on_off_elapsed` | `on · 5m` or `off · 2h` |
 | `alarm_elapsed` | `for 5m` if state is `Alarm`, otherwise `OK · 2h` |
+| `person_presence` | `Home`, `Away`, or zone name for `person.*` entities |
 | `state` | Raw HA state (default) |
+
+**Note:** MDI icon codepoints must use 8-digit Unicode escapes (`\U000FXXXX`), not 4-digit (`\uXXXX`), since MDI uses Plane 15 codepoints.
 
 ### `divider`
 

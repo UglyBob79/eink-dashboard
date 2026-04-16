@@ -1,5 +1,6 @@
 import appdaemon.plugins.hass.hassapi as hass
 from PIL import Image, ImageDraw, ImageFont
+import json
 import os
 
 # Display: Waveshare 7.5" V2 portrait
@@ -372,6 +373,10 @@ class EinkDashboard(hass.Hass):
         self.bin_rotation = bin_cfg.get("rotation", 270)   # degrees CW
         self.bin_invert   = bin_cfg.get("invert",   False)
 
+        self.stable_elapsed = self.args.get("stable_elapsed", False)
+        self._stable_ts     = {}
+        self._stable_path   = os.path.join(self.out_dir, "stable_timestamps.json")
+
         self.pages = []
         for page_cfg in self.args.get("pages", []):
             components = []
@@ -384,7 +389,53 @@ class EinkDashboard(hass.Hass):
                 components.append(cls(comp_cfg, self))
             self.pages.append(components)
 
+        if self.stable_elapsed:
+            self._init_stable_elapsed()
+
         self.run_every(self._scheduled_render, "now", interval)
+
+    def _init_stable_elapsed(self):
+        """Load persisted timestamps and register listeners for all tracked entities."""
+        if os.path.exists(self._stable_path):
+            try:
+                with open(self._stable_path) as f:
+                    self._stable_ts = json.load(f)
+                self.log(f"Loaded {len(self._stable_ts)} stable timestamps")
+            except Exception as e:
+                self.log(f"Could not load stable_timestamps.json: {e}", level="WARNING")
+
+        entities = []
+        for components in self.pages:
+            for comp in components:
+                entities += comp.entities()
+
+        for entity in set(entities):
+            # Seed from last_changed if not already tracked and state is real
+            if entity not in self._stable_ts:
+                state = self.get_state(entity)
+                if state not in (None, "unknown", "unavailable"):
+                    raw = self.get_state(entity, attribute="last_changed")
+                    if raw is not None:
+                        self._stable_ts[entity] = str(raw)
+
+            self.listen_state(self._on_stable_state_change, entity)
+
+        self._save_stable_ts()
+        self.log(f"stable_elapsed: tracking {len(set(entities))} entities")
+
+    def _on_stable_state_change(self, entity, attribute, old, new, kwargs):
+        if new in (None, "unknown", "unavailable"):
+            return
+        from datetime import datetime, timezone
+        self._stable_ts[entity] = datetime.now(timezone.utc).isoformat()
+        self._save_stable_ts()
+
+    def _save_stable_ts(self):
+        try:
+            with open(self._stable_path, "w") as f:
+                json.dump(self._stable_ts, f, indent=2)
+        except Exception as e:
+            self.log(f"Could not save stable_timestamps.json: {e}", level="WARNING")
 
     def _scheduled_render(self, kwargs):
         self.generate()
@@ -498,16 +549,27 @@ class EinkDashboard(hass.Hass):
     # ── Utilities ─────────────────────────────────────────────────────────────
 
     def _elapsed(self, entity):
-        """Return smart-unit string for time since entity last changed state."""
+        """Return smart-unit string for time since entity last changed state.
+
+        If stable_elapsed is enabled, uses the app-tracked timestamp (ignores
+        unknown/unavailable blips and survives restarts) instead of last_changed.
+        """
         from datetime import datetime, timezone
-        raw = self.get_state(entity, attribute="last_changed")
+        from dateutil.parser import parse
+
+        if self.stable_elapsed and entity in self._stable_ts:
+            raw = self._stable_ts[entity]
+        else:
+            raw = self.get_state(entity, attribute="last_changed")
+
         if raw is None:
             return "—"
         if isinstance(raw, str):
-            from dateutil.parser import parse
             dt = parse(raw)
         else:
             dt = raw
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         secs = max(0, int((datetime.now(timezone.utc) - dt).total_seconds()))
         if secs < 60:
             return f"{secs}s"

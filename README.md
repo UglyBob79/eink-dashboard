@@ -173,6 +173,20 @@ Renders a horizontal rule.
 
 Omit the `icon` key to render a text-only header.
 
+## Stable elapsed times
+
+By default, elapsed-type values (`elapsed`, `on_off_elapsed`, `alarm_elapsed`, `person_presence`) read `last_changed` directly from HA. This timestamp resets on any state transition — including brief `unknown`/`unavailable` blips during HA restarts or connectivity glitches, making the elapsed time incorrect after a reboot.
+
+Enable stable elapsed tracking with one line in the config:
+
+```yaml
+stable_elapsed: true
+```
+
+When enabled, the app listens to state changes for all tracked entities and records its own timestamps in `stable_timestamps.json` (written to `out_dir`). Transitions to `unknown` or `unavailable` are ignored. The file persists across AppDaemon restarts, so elapsed times survive both HA reboots and AppDaemon reloads.
+
+On first run, each entity is seeded from its current `last_changed` value so elapsed times are reasonable from the start.
+
 ## Multiple pages
 
 Define multiple pages under `pages:`. Each page renders to `eink_pageN.png` and `eink_pageN.bin` (0-indexed).

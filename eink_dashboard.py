@@ -55,6 +55,9 @@ class Component:
     def entities(self):
         return []
 
+    def stable_entities(self):
+        return []
+
     def render(self, draw, fonts, y):
         raise NotImplementedError
 
@@ -280,6 +283,9 @@ class StatusList(Component):
     def entities(self):
         return [item["entity"] for item in self._items]
 
+    def stable_entities(self):
+        return [item["entity"] for item in self._items if item.get("stable_elapsed")]
+
     def render(self, draw, fonts, y):
         hass = self._hass
         y += 26
@@ -373,9 +379,8 @@ class EinkDashboard(hass.Hass):
         self.bin_rotation = bin_cfg.get("rotation", 270)   # degrees CW
         self.bin_invert   = bin_cfg.get("invert",   False)
 
-        self.stable_elapsed = self.args.get("stable_elapsed", False)
-        self._stable_ts     = {}
-        self._stable_path   = os.path.join(self.out_dir, "stable_timestamps.json")
+        self._stable_ts   = {}
+        self._stable_path = os.path.join(self.out_dir, "stable_timestamps.json")
 
         self.pages = []
         for page_cfg in self.args.get("pages", []):
@@ -389,13 +394,21 @@ class EinkDashboard(hass.Hass):
                 components.append(cls(comp_cfg, self))
             self.pages.append(components)
 
-        if self.stable_elapsed:
-            self._init_stable_elapsed()
+        self._init_stable_elapsed()
 
         self.run_every(self._scheduled_render, "now", interval)
 
     def _init_stable_elapsed(self):
-        """Load persisted timestamps and register listeners for all tracked entities."""
+        """Load persisted timestamps and register listeners for entities with stable_elapsed: true."""
+        entities = []
+        for components in self.pages:
+            for comp in components:
+                entities += comp.stable_entities()
+        entities = list(set(entities))
+
+        if not entities:
+            return
+
         if os.path.exists(self._stable_path):
             try:
                 with open(self._stable_path) as f:
@@ -404,12 +417,7 @@ class EinkDashboard(hass.Hass):
             except Exception as e:
                 self.log(f"Could not load stable_timestamps.json: {e}", level="WARNING")
 
-        entities = []
-        for components in self.pages:
-            for comp in components:
-                entities += comp.entities()
-
-        for entity in set(entities):
+        for entity in entities:
             # Seed from last_changed if not already tracked and state is real
             if entity not in self._stable_ts:
                 state = self.get_state(entity)
@@ -421,7 +429,7 @@ class EinkDashboard(hass.Hass):
             self.listen_state(self._on_stable_state_change, entity)
 
         self._save_stable_ts()
-        self.log(f"stable_elapsed: tracking {len(set(entities))} entities")
+        self.log(f"stable_elapsed: tracking {len(entities)} entities")
 
     def _on_stable_state_change(self, entity, attribute, old, new, kwargs):
         if new in (None, "unknown", "unavailable"):
@@ -557,7 +565,7 @@ class EinkDashboard(hass.Hass):
         from datetime import datetime, timezone
         from dateutil.parser import parse
 
-        if self.stable_elapsed and entity in self._stable_ts:
+        if entity in self._stable_ts:
             raw = self._stable_ts[entity]
         else:
             raw = self.get_state(entity, attribute="last_changed")

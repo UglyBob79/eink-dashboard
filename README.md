@@ -177,15 +177,21 @@ Omit the `icon` key to render a text-only header.
 
 By default, elapsed-type values (`elapsed`, `on_off_elapsed`, `alarm_elapsed`, `person_presence`) read `last_changed` directly from HA. This timestamp resets on any state transition — including brief `unknown`/`unavailable` blips during HA restarts or connectivity glitches, making the elapsed time incorrect after a reboot.
 
-Enable stable elapsed tracking with one line in the config:
+Add `stable_elapsed: true` to individual `status_list` items to opt in:
 
 ```yaml
-stable_elapsed: true
+- type: status_list
+  items:
+    - icon: F0606
+      label: Pool pump
+      entity: switch.pool_pump
+      value: on_off_elapsed
+      stable_elapsed: true
 ```
 
-When enabled, the app listens to state changes for all tracked entities and records its own timestamps in `stable_timestamps.json` (written to `out_dir`). Transitions to `unknown` or `unavailable` are ignored. The file persists across AppDaemon restarts, so elapsed times survive both HA reboots and AppDaemon reloads.
+The app listens to state changes for opted-in entities only and records timestamps in `stable_timestamps.json` (written to `out_dir`). Transitions to `unknown` or `unavailable` are ignored. The file persists across AppDaemon and HA restarts.
 
-On first run, each entity is seeded from its current `last_changed` value so elapsed times are reasonable from the start.
+On first run, each entity is seeded from its current `last_changed` value so elapsed times are reasonable from the start. Only add `stable_elapsed` to entities where elapsed time is actually displayed — high-frequency sensors like power measurements don't need it and would cause excessive file writes.
 
 ## Multiple pages
 

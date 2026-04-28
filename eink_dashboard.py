@@ -412,7 +412,8 @@ class EinkDashboard(hass.Hass):
         if os.path.exists(self._stable_path):
             try:
                 with open(self._stable_path) as f:
-                    self._stable_ts = json.load(f)
+                    loaded = json.load(f)
+                self._stable_ts = {k: v for k, v in loaded.items() if k in entities}
                 self.log(f"Loaded {len(self._stable_ts)} stable timestamps")
             except Exception as e:
                 self.log(f"Could not load stable_timestamps.json: {e}", level="WARNING")
@@ -450,6 +451,13 @@ class EinkDashboard(hass.Hass):
 
     def generate(self):
         try:
+            # Delete stale pages before rendering so the ESP never fetches
+            # a page from a previous config with more pages.
+            import glob
+            for path in glob.glob(os.path.join(self.out_dir, "eink_page*.bin")) + \
+                        glob.glob(os.path.join(self.out_dir, "eink_page*.png")):
+                os.remove(path)
+
             unavailable = self._check_entities()
             if unavailable:
                 self.log(f"Unavailable entities: {unavailable}", level="WARNING")
@@ -568,7 +576,11 @@ class EinkDashboard(hass.Hass):
         if entity in self._stable_ts:
             raw = self._stable_ts[entity]
         else:
-            raw = self.get_state(entity, attribute="last_changed")
+            domain = entity.split(".")[0]
+            if domain == "input_datetime":
+                raw = self.get_state(entity)
+            else:
+                raw = self.get_state(entity, attribute="last_changed")
 
         if raw is None:
             return "—"

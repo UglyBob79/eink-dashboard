@@ -276,9 +276,16 @@ class Divider(Component):
 class StatusList(Component):
     def __init__(self, config, hass):
         self._hass  = hass
-        self._items = [
-            {**item, "icon": _mdi(item["icon"])} for item in config.get("items", [])
-        ]
+        self._items = []
+        for item in config.get("items", []):
+            entry = dict(item)
+            if "icon_on" in entry:
+                entry["icon_on"] = _mdi(entry["icon_on"])
+            if "icon_off" in entry:
+                entry["icon_off"] = _mdi(entry["icon_off"])
+            if "icon" in entry:
+                entry["icon"] = _mdi(entry["icon"])
+            self._items.append(entry)
 
     def entities(self):
         return [item["entity"] for item in self._items]
@@ -294,8 +301,17 @@ class StatusList(Component):
             if label == "auto":
                 friendly = hass.get_state(item["entity"], attribute="friendly_name") or item["entity"]
                 label = friendly.split()[0]
-            value = self._resolve_value(item["entity"], item.get("value", "state"))
-            y = hass._status_row(draw, fonts, y, item["icon"], label, value)
+            state = hass.get_state(item["entity"])
+            if state in (None, "unavailable", "unknown"):
+                icon  = _mdi("F05D6")
+                value = "—"
+            else:
+                value = self._resolve_value(item["entity"], item.get("value", "state"))
+                if "icon_on" in item or "icon_off" in item:
+                    icon = item.get("icon_on" if state == "on" else "icon_off", item.get("icon", ""))
+                else:
+                    icon = item.get("icon", "")
+            y = hass._status_row(draw, fonts, y, icon, label, value)
         return y
 
     def _resolve_value(self, entity, value_type):
@@ -306,6 +322,10 @@ class StatusList(Component):
             on      = hass.get_state(entity) == "on"
             elapsed = hass._elapsed(entity)
             return f"on · {elapsed}" if on else f"off · {elapsed}"
+        elif value_type == "open_closed_elapsed":
+            open_   = hass.get_state(entity) == "on"
+            elapsed = hass._elapsed(entity)
+            return f"open · {elapsed}" if open_ else f"closed · {elapsed}"
         elif value_type == "alarm_elapsed":
             alarm   = hass.get_state(entity) == "Alarm"
             elapsed = hass._elapsed(entity)
@@ -461,10 +481,9 @@ class EinkDashboard(hass.Hass):
             unavailable = self._check_entities()
             if unavailable:
                 self.log(f"Unavailable entities: {unavailable}", level="WARNING")
-                self._render_error_page("UNAVAILABLE ENTITIES", unavailable)
-            else:
-                for idx, components in enumerate(self.pages):
-                    self._render_page(idx, components)
+
+            for idx, components in enumerate(self.pages):
+                self._render_page(idx, components)
         except Exception as e:
             self.log(f"EinkDashboard render error: {e}", level="ERROR")
 
@@ -557,10 +576,14 @@ class EinkDashboard(hass.Hass):
         return y + 22
 
     def _status_row(self, draw, fonts, y, icon, label, value, margin=20, gap=6):
-        iw = draw.textlength(icon, font=fonts["icon_sm"])
-        draw.text((margin, y), icon, font=fonts["icon_sm"], fill=BLACK, anchor="lm")
-        draw.text((margin + iw + gap, y), f"{label}: {value}", font=fonts["status_text"], fill=BLACK, anchor="lm")
-        return y + 32
+        if icon:
+            iw = draw.textlength(icon, font=fonts["icon_sm"])
+            draw.text((margin, y), icon, font=fonts["icon_sm"], fill=BLACK, anchor="lm")
+            text_x = margin + iw + gap
+        else:
+            text_x = margin
+        draw.text((text_x, y), f"{label}: {value}", font=fonts["status_text"], fill=BLACK, anchor="lm")
+        return y + 36
 
     # ── Utilities ─────────────────────────────────────────────────────────────
 
@@ -617,8 +640,8 @@ class EinkDashboard(hass.Hass):
                 "small":       ImageFont.truetype(book, 13),
                 "label":       ImageFont.truetype(book, 12),
                 "icon":        ImageFont.truetype(mdi,  28),
-                "icon_sm":     ImageFont.truetype(mdi,  22),
-                "status_text": ImageFont.truetype(book, 18),
+                "icon_sm":     ImageFont.truetype(mdi,  24),
+                "status_text": ImageFont.truetype(book, 20),
             }
         except Exception as e:
             self.log(f"Font load failed, using default: {e}", level="WARNING")

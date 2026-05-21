@@ -381,6 +381,79 @@ class EnergyStrip(Component):
         return y + h + 22
 
 
+@_register("energy_bars")
+class EnergyBars(Component):
+    def __init__(self, config, hass):
+        self._hass          = hass
+        sensors             = config.get("sensors", {})
+        self._import_daily  = sensors["import_daily"]
+        self._export_daily  = sensors["export_daily"]
+        self._import_weekly = sensors["import_weekly"]
+        self._export_weekly = sensors["export_weekly"]
+        self._import_monthly= sensors["import_monthly"]
+        self._export_monthly= sensors["export_monthly"]
+
+    def entities(self):
+        return [
+            self._import_daily, self._export_daily,
+            self._import_weekly, self._export_weekly,
+            self._import_monthly, self._export_monthly,
+        ]
+
+    def render(self, draw, fonts, y):
+        hass = self._hass
+        today_net = hass._float(self._export_daily)   - hass._float(self._import_daily)
+        week_net  = hass._float(self._export_weekly)  - hass._float(self._import_weekly)
+        month_net = hass._float(self._export_monthly) - hass._float(self._import_monthly)
+
+        max_val = max(abs(today_net), abs(week_net), abs(month_net), 0.1)
+
+        BAR_H   = 22
+        ROW_GAP = 10
+        bar_y   = y + 26
+        for label, value in [("Today", today_net), ("Week", week_net), ("Month", month_net)]:
+            self._draw_bar(draw, fonts, bar_y, value, max_val, label)
+            bar_y += BAR_H + ROW_GAP
+
+        return bar_y - ROW_GAP + 8
+
+    def _draw_bar(self, draw, fonts, y, value_kwh, max_val, label):
+        MARGIN   = 20
+        LABEL_W  = 52
+        VALUE_W  = 65
+        BAR_H    = 22
+        R        = BAR_H // 2
+        BAR_L    = MARGIN + LABEL_W
+        BAR_R    = W - MARGIN - VALUE_W
+        BAR_W    = BAR_R - BAR_L
+        CENTER_X = BAR_L + BAR_W // 2
+
+        draw.text((MARGIN, y + BAR_H // 2), label, font=fonts["label"], fill=BLACK, anchor="lm")
+        draw.rounded_rectangle([BAR_L, y, BAR_R, y + BAR_H], radius=R, outline=BLACK, width=2)
+        draw.line([(CENTER_X, y + 2), (CENTER_X, y + BAR_H - 2)], fill=BLACK, width=2)
+
+        fill_w = int((abs(value_kwh) / max_val) * (BAR_W // 2 - R))
+        full = abs(value_kwh) >= max_val
+        ir = (BAR_H - 6) // 2  # = 8, fill cap radius (half inner bar height)
+        if value_kwh > 0.05 and fill_w > 0:
+            if full:
+                fx1 = CENTER_X + 2
+                draw.rounded_rectangle([fx1, y + 3, BAR_R - 4, y + BAR_H - 3], radius=ir, fill=BLACK)
+                draw.rectangle([fx1, y + 3, fx1 + ir, y + BAR_H - 3], fill=BLACK)
+            else:
+                draw.rectangle([CENTER_X + 2, y + 3, min(CENTER_X + fill_w, BAR_R - R), y + BAR_H - 3], fill=BLACK)
+        elif value_kwh < -0.05 and fill_w > 0:
+            if full:
+                fx2 = CENTER_X - 2
+                draw.rounded_rectangle([BAR_L + 4, y + 3, fx2, y + BAR_H - 3], radius=ir, fill=BLACK)
+                draw.rectangle([fx2 - ir, y + 3, fx2, y + BAR_H - 3], fill=BLACK)
+            else:
+                draw.rectangle([max(CENTER_X - fill_w, BAR_L + R), y + 3, CENTER_X - 2, y + BAR_H - 3], fill=BLACK)
+
+        sign = "+" if value_kwh >= 0 else ""
+        draw.text((BAR_R + 6, y + BAR_H // 2), f"{sign}{value_kwh:.1f}", font=fonts["small"], fill=BLACK, anchor="lm")
+
+
 # ── AppDaemon app ─────────────────────────────────────────────────────────────
 
 class EinkDashboard(hass.Hass):
